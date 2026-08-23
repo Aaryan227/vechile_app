@@ -155,9 +155,11 @@ async function fetchCurrentUser() {
 
     state.user = await res.json();
     updateUserUI();
-    showSection('dashboard');
-    loadDashboardMetrics();
-    loadVehicles();
+    if (state.user.role === 'admin') {
+      switchTab('dashboard');
+    } else {
+      switchTab('vehicles');
+    }
   } catch (err) {
     handleLogout();
   }
@@ -181,12 +183,16 @@ function updateUserUI() {
     userNameDisplay.innerText = state.user.name;
     userRoleBadge.innerText = state.user.role.toUpperCase();
 
+    const navDashboard = document.getElementById('nav-item-dashboard');
+
     if (state.user.role === 'admin') {
       userRoleBadge.className = 'badge badge-info';
       if (btnAddVehicle) btnAddVehicle.style.display = 'inline-flex';
+      if (navDashboard) navDashboard.style.display = 'inline-block';
     } else {
       userRoleBadge.className = 'badge badge-success';
       if (btnAddVehicle) btnAddVehicle.style.display = 'none';
+      if (navDashboard) navDashboard.style.display = 'none'; // Hide Fleet Dashboard for Drivers
     }
   }
 }
@@ -205,11 +211,22 @@ function handleLogout() {
 
 // Navigation Tab Switching
 function switchTab(tabId) {
-  document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
-  event.target.classList.add('active');
+  if (state.user && state.user.role !== 'admin' && tabId === 'dashboard') {
+    showToast('Access denied: Fleet Dashboard is restricted to Admin', 'error');
+    tabId = 'vehicles';
+  }
+
+  document.querySelectorAll('.nav-link').forEach(link => {
+    if (link.getAttribute('data-tab') === tabId) {
+      link.classList.add('active');
+    } else {
+      link.classList.remove('active');
+    }
+  });
+
   showSection(tabId);
 
-  if (tabId === 'dashboard') loadDashboardMetrics();
+  if (tabId === 'dashboard' && state.user && state.user.role === 'admin') loadDashboardMetrics();
   if (tabId === 'vehicles') loadVehicles();
   if (tabId === 'documents') loadDocuments();
   if (tabId === 'tanker-reports') loadTankerReports();

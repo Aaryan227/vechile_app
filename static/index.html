@@ -25,10 +25,10 @@
       </div>
 
       <ul class="nav-links" id="nav-links" style="display: none;">
-        <li><a class="nav-link active" onclick="switchTab('dashboard')">Dashboard</a></li>
-        <li><a class="nav-link" onclick="switchTab('vehicles')">Vehicles</a></li>
-        <li><a class="nav-link" onclick="switchTab('documents')">Documents</a></li>
-        <li><a class="nav-link" onclick="switchTab('tanker-reports')">Tanker Reports</a></li>
+        <li id="nav-item-dashboard"><a class="nav-link" data-tab="dashboard" onclick="switchTab('dashboard')">Dashboard</a></li>
+        <li id="nav-item-vehicles"><a class="nav-link" data-tab="vehicles" onclick="switchTab('vehicles')">Vehicles</a></li>
+        <li id="nav-item-documents"><a class="nav-link" data-tab="documents" onclick="switchTab('documents')">Documents</a></li>
+        <li id="nav-item-tanker-reports"><a class="nav-link" data-tab="tanker-reports" onclick="switchTab('tanker-reports')">Tanker Reports</a></li>
       </ul>
 
       <div id="user-section" style="display: flex; align-items: center; gap: 0.75rem;">
