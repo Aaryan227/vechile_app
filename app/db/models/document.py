@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Date, DateTime, Enum, ForeignKey
+from sqlalchemy import Column, Integer, String, Date, DateTime, Enum, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from app.db.session import Base
 
@@ -32,6 +32,7 @@ class Document(Base):
     file_size = Column(Integer, nullable=False)
     uploaded_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     status = Column(Enum(DocumentStatus), default=DocumentStatus.VALID, nullable=False, index=True)
+    can_reupload = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 

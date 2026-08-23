@@ -30,7 +30,8 @@ def upload_document(
 ):
     # Authorization check: verify vehicle exists and driver is assigned to it if driver
     vehicle = vehicle_service.get_vehicle_by_id(db, vehicle_id)
-    if current_user.role == UserRole.DRIVER:
+    is_driver = (current_user.role == UserRole.DRIVER)
+    if is_driver:
         assigned = vehicle_service.get_driver_assigned_vehicles(db, current_user.id)
         if vehicle.id not in [v.id for v in assigned]:
             raise PermissionDeniedException("You are not assigned to this vehicle")
@@ -48,9 +49,19 @@ def upload_document(
         file_url=file_url,
         mime_type=mime_type,
         file_size=file_size,
-        user_id=current_user.id
+        user_id=current_user.id,
+        is_driver=is_driver
     )
     return doc
+
+@router.post("/{document_id}/allow-reupload", response_model=DocumentResponse)
+def allow_reupload(
+    document_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """Admin endpoint to grant permission to driver to re-upload or update a document."""
+    return document_service.grant_reupload_permission(db, document_id, admin.id)
 
 @router.get("/vehicle/{vehicle_id}", response_model=List[DocumentResponse])
 def get_documents_by_vehicle(
@@ -87,11 +98,12 @@ def delete_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    is_driver = (current_user.role == UserRole.DRIVER)
     doc = document_service.get_document_by_id(db, document_id)
-    if current_user.role != UserRole.ADMIN and doc.uploaded_by != current_user.id:
+    if is_driver and doc.uploaded_by != current_user.id:
         raise PermissionDeniedException("Insufficient permission to delete this document")
         
-    document_service.delete_document(db, document_id, current_user.id)
+    document_service.delete_document(db, document_id, current_user.id, is_driver=is_driver)
 
 @router.get("/file/{filename}")
 def serve_document_file(

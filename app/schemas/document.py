@@ -27,6 +27,7 @@ class DocumentResponse(DocumentBase):
     file_size: int
     uploaded_by: Optional[int] = None
     status: DocumentStatus
+    can_reupload: bool = False
     created_at: datetime
     updated_at: datetime
 
