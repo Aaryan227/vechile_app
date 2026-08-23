@@ -114,15 +114,6 @@ async function handleRegister(e) {
   }
 }
 
-function setDemoCredentials(role) {
-  if (role === 'admin') {
-    document.getElementById('login-email').value = 'admin@kingspetroleum.com';
-    document.getElementById('login-password').value = 'Admin@123456';
-  } else {
-    document.getElementById('login-email').value = 'driver@kingspetroleum.com';
-    document.getElementById('login-password').value = 'Driver@123456';
-  }
-}
 
 async function handleLogin(e) {
   e.preventDefault();
@@ -414,7 +405,7 @@ function renderDocumentsTable(docs) {
         ${d.can_reupload ? '<span class="badge badge-success">Unlocked</span>' : '<span class="badge badge-pending">Locked</span>'}
       </td>
       <td>
-        <a href="${d.file_url}" target="_blank" class="btn btn-secondary btn-sm">📄 View File</a>
+        <a href="${d.file_url}?token=${encodeURIComponent(state.token)}" target="_blank" class="btn btn-secondary btn-sm">📄 View File</a>
       </td>
       <td>
         <div style="display: flex; gap: 0.35rem;">

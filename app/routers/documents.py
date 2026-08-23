@@ -105,13 +105,37 @@ def delete_document(
         
     document_service.delete_document(db, document_id, current_user.id, is_driver=is_driver)
 
+from fastapi import Query
+from app.core.security import decode_token
+from app.db.models.document import Document
+
 @router.get("/file/{filename}")
 def serve_document_file(
     filename: str,
-    current_user: User = Depends(get_current_user)
+    token: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
 ):
+    if not token:
+        raise CredentialsException("Authentication token required to view document")
+    try:
+        payload = decode_token(token)
+        user_id = payload.get("sub")
+        user = db.query(User).filter(User.id == int(user_id)).first()
+        if not user or not user.is_active:
+            raise CredentialsException("User account invalid or inactive")
+    except Exception:
+        raise CredentialsException("Invalid or expired token")
+
     safe_filename = os.path.basename(filename)
     file_path = os.path.join(settings.UPLOAD_DIR, safe_filename)
     if not os.path.exists(file_path):
         raise NotFoundException("Requested file not found")
-    return FileResponse(file_path)
+
+    doc = db.query(Document).filter(Document.file_name == safe_filename).first()
+    media_type = doc.mime_type if doc else None
+
+    return FileResponse(
+        file_path,
+        media_type=media_type,
+        headers={"Content-Disposition": f"inline; filename=\"{safe_filename}\""}
+    )
