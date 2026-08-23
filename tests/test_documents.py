@@ -74,10 +74,11 @@ def test_document_upload_and_reupload_permission_flow(client, db, test_admin, te
     assert res4.status_code == 201
     assert res4.json()["can_reupload"] is False
 
-def test_change_password_endpoint_removed(client, driver_headers):
+def test_change_password_endpoint(client, driver_headers):
     res = client.post(
         "/api/v1/auth/change-password",
         headers=driver_headers,
         json={"old_password": "DriverPass123", "new_password": "NewDriverPass123!"}
     )
-    assert res.status_code == 404
+    assert res.status_code == 200
+    assert res.json()["message"] == "Password changed successfully"

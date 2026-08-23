@@ -48,6 +48,12 @@ def get_current_user_info(current_user: User = Depends(get_current_user)):
     """Get profile of current authenticated user."""
     return current_user
 
+@router.post("/change-password", status_code=status.HTTP_200_OK)
+def change_password(data: PasswordChange, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Change password for current authenticated user."""
+    auth_service.change_user_password(db, current_user, data.old_password, data.new_password)
+    return {"message": "Password changed successfully"}
+
 @router.post("/logout", status_code=status.HTTP_200_OK)
 def logout(current_user: User = Depends(get_current_user)):
     """Client side logout confirmation."""
