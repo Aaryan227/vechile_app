@@ -176,6 +176,7 @@ function updateUserUI() {
   const navLinks = document.getElementById('nav-links');
   const userInfo = document.getElementById('user-info');
   const btnLogout = document.getElementById('btn-logout');
+  const btnChangePassword = document.getElementById('btn-change-password');
   const userNameDisplay = document.getElementById('user-name-display');
   const userRoleBadge = document.getElementById('user-role-badge');
   const btnAddVehicle = document.getElementById('btn-add-vehicle-toggle');
@@ -183,7 +184,8 @@ function updateUserUI() {
   if (state.user) {
     navLinks.style.display = 'flex';
     userInfo.style.display = 'flex';
-    btnLogout.style.display = 'block';
+    if (btnLogout) btnLogout.style.display = 'block';
+    if (btnChangePassword) btnChangePassword.style.display = 'block';
 
     userNameDisplay.innerText = state.user.name;
     userRoleBadge.innerText = state.user.role.toUpperCase();
@@ -204,7 +206,8 @@ function handleLogout() {
   localStorage.removeItem('access_token');
   document.getElementById('nav-links').style.display = 'none';
   document.getElementById('user-info').style.display = 'none';
-  document.getElementById('btn-logout').style.display = 'none';
+  if (document.getElementById('btn-logout')) document.getElementById('btn-logout').style.display = 'none';
+  if (document.getElementById('btn-change-password')) document.getElementById('btn-change-password').style.display = 'none';
   showSection('auth');
   showToast('Logged out', 'info');
 }
@@ -287,9 +290,11 @@ async function loadVehicles() {
 function renderVehiclesTable() {
   const tbody = document.getElementById('tbody-vehicles');
   if (state.vehicles.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--color-text-muted);">No vehicles recorded yet. Click '+ Add Vehicle' to start.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--color-text-muted);">No vehicles recorded yet. ${state.user && state.user.role === 'admin' ? "Click '+ Add Vehicle' to start." : ''}</td></tr>`;
     return;
   }
+
+  const isAdmin = state.user && state.user.role === 'admin';
 
   tbody.innerHTML = state.vehicles.map(v => `
     <tr>
@@ -300,7 +305,10 @@ function renderVehiclesTable() {
       <td>${v.chassis_number || 'N/A'}</td>
       <td><span class="badge badge-${v.status.toLowerCase()}">${v.status}</span></td>
       <td>
-        <button class="btn btn-secondary btn-sm" onclick="selectVehicleDocs(${v.id})">View Docs</button>
+        <div style="display: flex; gap: 0.35rem;">
+          <button class="btn btn-secondary btn-sm" onclick="selectVehicleDocs(${v.id})">View Docs</button>
+          ${isAdmin ? `<button class="btn btn-accent btn-sm" onclick="openAssignDriverModal(${v.id}, '${v.vehicle_number}')">Assign Driver</button>` : ''}
+        </div>
       </td>
     </tr>
   `).join('');
@@ -389,9 +397,11 @@ function selectVehicleDocs(vehicleId) {
 function renderDocumentsTable(docs) {
   const tbody = document.getElementById('tbody-documents');
   if (!docs || docs.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--color-text-muted);">No documents uploaded for this vehicle yet.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--color-text-muted);">No documents uploaded for this vehicle yet.</td></tr>`;
     return;
   }
+
+  const isAdmin = state.user && state.user.role === 'admin';
 
   tbody.innerHTML = docs.map(d => `
     <tr>
@@ -401,10 +411,16 @@ function renderDocumentsTable(docs) {
       <td>${d.expiry_date}</td>
       <td><span class="badge badge-${d.status.toLowerCase()}">${d.status}</span></td>
       <td>
+        ${d.can_reupload ? '<span class="badge badge-success">Unlocked</span>' : '<span class="badge badge-pending">Locked</span>'}
+      </td>
+      <td>
         <a href="${d.file_url}" target="_blank" class="btn btn-secondary btn-sm">📄 View File</a>
       </td>
       <td>
-        <button class="btn btn-danger btn-sm" onclick="handleDeleteDocument(${d.id})">Delete</button>
+        <div style="display: flex; gap: 0.35rem;">
+          ${isAdmin && !d.can_reupload ? `<button class="btn btn-accent btn-sm" onclick="handleAllowReupload(${d.id})">🔓 Allow Re-upload</button>` : ''}
+          <button class="btn btn-danger btn-sm" onclick="handleDeleteDocument(${d.id})">Delete</button>
+        </div>
       </td>
     </tr>
   `).join('');
@@ -556,4 +572,127 @@ function handleExportExcel() {
   let url = `${API_BASE}/tanker-reports/export`;
   if (month) url += `?month=${month}`;
   window.open(url, '_blank');
+}
+
+// Change Password Modal Handlers
+function openChangePasswordModal() {
+  const modal = document.getElementById('modal-change-password');
+  if (modal) modal.classList.add('active');
+}
+
+function closeChangePasswordModal() {
+  const modal = document.getElementById('modal-change-password');
+  if (modal) modal.classList.remove('active');
+  const form = document.getElementById('form-change-password');
+  if (form) form.reset();
+}
+
+async function handleAuthChangePassword(e) {
+  e.preventDefault();
+  const old_password = document.getElementById('cp-old-password').value;
+  const new_password = document.getElementById('cp-new-password').value;
+  const confirm_password = document.getElementById('cp-confirm-password').value;
+
+  if (new_password !== confirm_password) {
+    showToast('New passwords do not match', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/change-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.token}`
+      },
+      body: JSON.stringify({ old_password, new_password })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Password change failed');
+    }
+
+    showToast('Password updated successfully!', 'success');
+    closeChangePasswordModal();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// Assign Driver Modal Handlers (Admin Only)
+async function openAssignDriverModal(vehicleId, vehicleNumber) {
+  document.getElementById('assign-vehicle-id').value = vehicleId;
+  document.getElementById('assign-vehicle-number').value = vehicleNumber;
+
+  try {
+    const res = await fetch(`${API_BASE}/admin/drivers`, {
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+    if (!res.ok) throw new Error('Failed to fetch drivers list');
+
+    const drivers = await res.json();
+    const select = document.getElementById('assign-driver-id');
+    select.innerHTML = '<option value="">-- Choose Active Driver --</option>' +
+      drivers.map(d => `<option value="${d.id}">${d.name} (${d.email})</option>`).join('');
+
+    document.getElementById('modal-assign-driver').classList.add('active');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function closeAssignDriverModal() {
+  const modal = document.getElementById('modal-assign-driver');
+  if (modal) modal.classList.remove('active');
+  const form = document.getElementById('form-assign-driver');
+  if (form) form.reset();
+}
+
+async function handleAssignDriver(e) {
+  e.preventDefault();
+  const vehicleId = document.getElementById('assign-vehicle-id').value;
+  const driverId = parseInt(document.getElementById('assign-driver-id').value);
+
+  try {
+    const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/assign`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.token}`
+      },
+      body: JSON.stringify({ driver_id: driverId })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to assign driver');
+    }
+
+    showToast('Driver assigned successfully!', 'success');
+    closeAssignDriverModal();
+    loadVehicles();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// Admin Document Re-Upload Permission Grant Handler
+async function handleAllowReupload(docId) {
+  try {
+    const res = await fetch(`${API_BASE}/documents/${docId}/allow-reupload`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to grant re-upload permission');
+    }
+
+    showToast('Re-upload permission granted for driver!', 'success');
+    loadDocuments();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }

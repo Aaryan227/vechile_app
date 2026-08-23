@@ -31,11 +31,12 @@
         <li><a class="nav-link" onclick="switchTab('tanker-reports')">Tanker Reports</a></li>
       </ul>
 
-      <div id="user-section" style="display: flex; align-items: center; gap: 1rem;">
+      <div id="user-section" style="display: flex; align-items: center; gap: 0.75rem;">
         <div id="user-info" class="user-badge" style="display: none;">
           <span id="user-name-display">Guest</span>
           <span id="user-role-badge" class="badge badge-info">ADMIN</span>
         </div>
+        <button id="btn-change-password" class="btn-logout" style="display: none;" onclick="openChangePasswordModal()">🔑 Change Password</button>
         <button id="btn-logout" class="btn-logout" style="display: none;" onclick="handleLogout()">Logout</button>
       </div>
     </header>
@@ -281,7 +282,10 @@
 
         <!-- Upload Form -->
         <div class="card-form">
-          <h3 style="margin-bottom: 1rem; color: var(--color-primary);">Upload Vehicle Document</h3>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3 style="color: var(--color-primary);">Upload Vehicle Document</h3>
+            <span style="font-size: 0.8rem; color: var(--color-info); font-weight: 500;">🔒 Each document type can be uploaded once (Admin permission required to re-upload)</span>
+          </div>
           <form id="form-upload-doc" onsubmit="handleDocumentUpload(event)">
             <div class="form-grid">
               <div class="form-group">
@@ -335,13 +339,14 @@
                 <th>Doc Number</th>
                 <th>Expiry Date</th>
                 <th>Status</th>
+                <th>Re-Upload</th>
                 <th>File</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="tbody-documents">
               <tr>
-                <td colspan="7" style="text-align: center; color: var(--color-text-muted);">Select a vehicle to view documents</td>
+                <td colspan="8" style="text-align: center; color: var(--color-text-muted);">Select a vehicle to view documents</td>
               </tr>
             </tbody>
           </table>
@@ -477,6 +482,61 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <!-- Change Password Modal -->
+  <div id="modal-change-password" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>🔑 Change Password</h3>
+        <button class="modal-close" onclick="closeChangePasswordModal()">✕</button>
+      </div>
+      <form id="form-change-password" onsubmit="handleAuthChangePassword(event)">
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>Current Password *</label>
+          <input type="password" id="cp-old-password" class="form-control" placeholder="••••••••" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>New Password *</label>
+          <input type="password" id="cp-new-password" class="form-control" placeholder="••••••••" required minlength="6">
+        </div>
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label>Confirm New Password *</label>
+          <input type="password" id="cp-confirm-password" class="form-control" placeholder="••••••••" required minlength="6">
+        </div>
+        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary" onclick="closeChangePasswordModal()">Cancel</button>
+          <button type="submit" class="btn btn-accent">Update Password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Assign Driver Modal (Admin Only) -->
+  <div id="modal-assign-driver" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>🚛 Assign Driver to Vehicle</h3>
+        <button class="modal-close" onclick="closeAssignDriverModal()">✕</button>
+      </div>
+      <form id="form-assign-driver" onsubmit="handleAssignDriver(event)">
+        <input type="hidden" id="assign-vehicle-id">
+        <div class="form-group" style="margin-bottom: 1.25rem;">
+          <label>Vehicle Number</label>
+          <input type="text" id="assign-vehicle-number" class="form-control" readonly>
+        </div>
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label>Select Driver *</label>
+          <select id="assign-driver-id" class="form-control" required>
+            <option value="">-- Choose Active Driver --</option>
+          </select>
+        </div>
+        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary" onclick="closeAssignDriverModal()">Cancel</button>
+          <button type="submit" class="btn btn-accent">Assign Driver</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <div id="toast-container"></div>
