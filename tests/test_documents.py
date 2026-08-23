@@ -49,7 +49,7 @@ def test_document_upload_and_reupload_permission_flow(client, db, test_admin, te
         files={"file": ("rc2.pdf", BytesIO(file_content), "application/pdf")}
     )
     assert res2.status_code == 403
-    assert "Admin permission is required" in res2.json()["detail"]
+    assert "permission from an admin" in res2.json()["detail"]
 
     # 5. Admin grants reupload permission
     res3 = client.post(
