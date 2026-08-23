@@ -1,0 +1,30 @@
+# Byte-compiled / Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Environments
+venv/
+env/
+ENV/
+.env
+
+# Local Database
+*.db
+*.sqlite3
+vehicle_logistics.db
+
+# Storage / Uploads
+uploads/*
+!uploads/.gitkeep
+
+# IDE / Editor
+.vscode/
+.idea/
+.pytest_cache/
+
+# OS files
+Thumbs.db
+.DS_Store

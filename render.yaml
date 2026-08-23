@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: vehicle-logistics-app
+    env: python
+    buildCommand: pip install -r requirements.txt && alembic upgrade head
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: vehicle-logistics-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_ACCESS_CODE
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11.0
+
+databases:
+  - name: vehicle-logistics-db
+    databaseName: vehicle_logistics
+    user: vehicle_user
+    plan: free
