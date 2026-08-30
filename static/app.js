@@ -394,8 +394,10 @@ async function loadDocuments() {
       headers: { 'Authorization': `Bearer ${state.token}` }
     });
     if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const errorMsg = err.detail || 'Failed to load documents for this vehicle.';
       const tbody = document.getElementById('tbody-documents');
-      if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--color-error);">Failed to load documents for this vehicle.</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--color-error);">${errorMsg}</td></tr>`;
       return;
     }
 
