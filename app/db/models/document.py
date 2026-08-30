@@ -33,6 +33,8 @@ class Document(Base):
     uploaded_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     status = Column(Enum(DocumentStatus), default=DocumentStatus.VALID, nullable=False, index=True)
     can_reupload = Column(Boolean, default=False, nullable=False)
+    reupload_requested = Column(Boolean , default=False , index = True)
+    reupload_reason = Column(String(500) , nullable = True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 

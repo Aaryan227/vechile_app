@@ -51,6 +51,8 @@ def create_or_update_document(
         existing_doc.uploaded_by = user_id
         existing_doc.status = status
         existing_doc.can_reupload = False  # Reset permission after update
+        existing_doc.reupload_requested = False
+        existing_doc.reupload_reason = None
         
         db.commit()
         db.refresh(existing_doc)
@@ -115,6 +117,8 @@ def create_document(
 def grant_reupload_permission(db: Session, document_id: int, admin_id: int) -> Document:
     doc = get_document_by_id(db, document_id)
     doc.can_reupload = True
+    doc.reupload_requested = False
+    doc.reupload_reason = None
     db.commit()
     db.refresh(doc)
     
@@ -180,3 +184,32 @@ def delete_document(db: Session, document_id: int, user_id: int, is_driver: bool
     audit = AuditLog(user_id=user_id, action="DELETE_DOCUMENT", entity_type="document", entity_id=document_id)
     db.add(audit)
     db.commit()
+
+
+
+def request_reupload_permission(
+    db: Session, 
+    document_id: int, 
+    user_id: int, 
+    reason: Optional[str] = None
+) -> Document:
+    doc = get_document_by_id(db, document_id)
+    doc.reupload_requested = True
+    doc.reupload_reason = reason
+    db.commit()
+    db.refresh(doc)
+    
+    audit = AuditLog(
+        user_id=user_id,
+        action="REQUEST_DOCUMENT_REUPLOAD",
+        entity_type="document",
+        entity_id=doc.id,
+        details=f"Reason: {reason}" if reason else None
+    )
+    db.add(audit)
+    db.commit()
+    return doc
+
+
+def get_pending_reupload_requests(db:Session) -> List[Document]:
+    return db.query(Document).filter(Document.reupload_requested == True).all()

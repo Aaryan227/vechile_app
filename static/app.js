@@ -410,28 +410,56 @@ function renderDocumentsTable(docs) {
   }
 
   const isAdmin = state.user && state.user.role === 'admin';
+  const isDriver = state.user && state.user.role === 'driver';
 
-  tbody.innerHTML = docs.map(d => `
-    <tr>
-      <td>#${d.vehicle_id}</td>
-      <td><strong>${d.document_type}</strong></td>
-      <td>${d.document_number || 'N/A'}</td>
-      <td>${d.expiry_date}</td>
-      <td><span class="badge badge-${d.status.toLowerCase()}">${d.status}</span></td>
-      <td>
-        ${d.can_reupload ? '<span class="badge badge-success">Unlocked</span>' : '<span class="badge badge-pending">Locked</span>'}
-      </td>
-      <td>
-        <a href="${d.file_url}?token=${encodeURIComponent(state.token)}" target="_blank" class="btn btn-secondary btn-sm">📄 View File</a>
-      </td>
-      <td>
-        <div style="display: flex; gap: 0.35rem;">
-          ${isAdmin && !d.can_reupload ? `<button class="btn btn-accent btn-sm" onclick="handleAllowReupload(${d.id})">🔓 Allow Re-upload</button>` : ''}
-          <button class="btn btn-danger btn-sm" onclick="handleDeleteDocument(${d.id})">Delete</button>
-        </div>
-      </td>
-    </tr>
-  `).join('');
+  tbody.innerHTML = docs.map(d => {
+    // 1. Determine Re-upload status badge
+    let reuploadBadge = '<span class="badge badge-pending">Locked</span>';
+    if (d.can_reupload) {
+      reuploadBadge = '<span class="badge badge-success">Unlocked</span>';
+    } else if (d.reupload_requested) {
+      const reasonText = d.reupload_reason ? ` (${d.reupload_reason})` : '';
+      reuploadBadge = `<span class="badge badge-warning" title="Requested: ${d.reupload_reason || 'No reason'}">Requested${reasonText}</span>`;
+    }
+
+    // 2. Action buttons based on role & document status
+    let actionButtons = '';
+
+    if (isAdmin) {
+      if (!d.can_reupload) {
+        const btnText = d.reupload_requested ? '✅ Approve Re-upload' : '🔓 Allow Re-upload';
+        const btnClass = d.reupload_requested ? 'btn-accent' : 'btn-secondary';
+        actionButtons += `<button class="btn ${btnClass} btn-sm" onclick="handleAllowReupload(${d.id})">${btnText}</button>`;
+      }
+    } else if (isDriver) {
+      if (!d.can_reupload && !d.reupload_requested) {
+        actionButtons += `<button class="btn btn-secondary btn-sm" onclick="handleRequestReupload(${d.id})">📩 Request Re-upload</button>`;
+      } else if (d.reupload_requested) {
+        actionButtons += `<span style="font-size: 0.75rem; color: var(--color-warning);">Awaiting Admin Approval</span>`;
+      }
+    }
+
+    actionButtons += `<button class="btn btn-danger btn-sm" onclick="handleDeleteDocument(${d.id})">Delete</button>`;
+
+    return `
+      <tr>
+        <td>#${d.vehicle_id}</td>
+        <td><strong>${d.document_type}</strong></td>
+        <td>${d.document_number || 'N/A'}</td>
+        <td>${d.expiry_date}</td>
+        <td><span class="badge badge-${d.status.toLowerCase()}">${d.status}</span></td>
+        <td>${reuploadBadge}</td>
+        <td>
+          <a href="${d.file_url}?token=${encodeURIComponent(state.token)}" target="_blank" class="btn btn-secondary btn-sm">📄 View File</a>
+        </td>
+        <td>
+          <div style="display: flex; gap: 0.35rem; align-items: center;">
+            ${actionButtons}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
 }
 
 async function handleDocumentUpload(e) {
@@ -477,6 +505,54 @@ async function handleDeleteDocument(docId) {
     showToast(err.message, 'error');
   }
 }
+
+// Driver requests reupload permission
+async function handleRequestReupload(docId) {
+  const reason = prompt('Please enter the reason for re-uploading this document (e.g., Updated RC, Clearer scan needed):');
+  if (reason === null) return; // User clicked cancel
+
+  try {
+    const res = await fetch(`${API_BASE}/documents/${docId}/request-reupload`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.token}`
+      },
+      body: JSON.stringify({ reason: reason })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to submit reupload request');
+    }
+
+    showToast('Re-upload request sent to Admin', 'success');
+    loadDocuments();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// Admin allows reupload permission
+async function handleAllowReupload(docId) {
+  try {
+    const res = await fetch(`${API_BASE}/documents/${docId}/allow-reupload`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to grant reupload permission');
+    }
+
+    showToast('Re-upload permission granted to driver', 'success');
+    loadDocuments();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
 
 // Tanker Daily Report Calculations & Logic
 function calculateFreightAndHSD() {

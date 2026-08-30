@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Form, File, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-
+from app.schemas.document import ReuploadRequestCreate
 from app.db.session import get_db
 from app.db.models.user import User, UserRole
 from app.db.models.document import DocumentType
@@ -54,6 +54,26 @@ def upload_document(
     )
     return doc
 
+
+@router.post("/{document_id}/request-reupload", response_model=DocumentResponse)
+def request_reupload(
+    document_id: int,
+    payload: Optional[ReuploadRequestCreate] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Driver endpoint to request reupload permission from Admin."""
+    doc = document_service.get_document_by_id(db, document_id)
+    
+    # Check assignment if driver
+    if current_user.role == UserRole.DRIVER:
+        assigned = vehicle_service.get_driver_assigned_vehicles(db, current_user.id)
+        if doc.vehicle_id not in [v.id for v in assigned]:
+            raise PermissionDeniedException("You are not assigned to this vehicle")
+    reason = payload.reason if payload else None
+    return document_service.request_reupload_permission(db, document_id, current_user.id, reason)
+
+
 @router.post("/{document_id}/allow-reupload", response_model=DocumentResponse)
 def allow_reupload(
     document_id: int,
@@ -62,6 +82,9 @@ def allow_reupload(
 ):
     """Admin endpoint to grant permission to driver to re-upload or update a document."""
     return document_service.grant_reupload_permission(db, document_id, admin.id)
+
+
+
 
 @router.get("/vehicle/{vehicle_id}", response_model=List[DocumentResponse])
 def get_documents_by_vehicle(
@@ -76,6 +99,8 @@ def get_documents_by_vehicle(
             raise PermissionDeniedException("Access denied: You are not assigned to this vehicle")
             
     return document_service.get_documents_for_vehicle(db, vehicle_id)
+
+
 
 @router.get("/expired", response_model=List[DocumentResponse])
 def get_expired_documents(
@@ -104,6 +129,8 @@ def delete_document(
         raise PermissionDeniedException("Insufficient permission to delete this document")
         
     document_service.delete_document(db, document_id, current_user.id, is_driver=is_driver)
+
+
 
 from fastapi import Query
 from app.core.security import decode_token
@@ -139,3 +166,12 @@ def serve_document_file(
         media_type=media_type,
         headers={"Content-Disposition": f"inline; filename=\"{safe_filename}\""}
     )
+
+
+@router.get("/reupload-requests", response_model=List[DocumentResponse])
+def get_reupload_requests(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """Admin endpoint to list all documents with pending reupload requests."""
+    return document_service.get_pending_reupload_requests(db)

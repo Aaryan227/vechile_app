@@ -28,7 +28,13 @@ class DocumentResponse(DocumentBase):
     uploaded_by: Optional[int] = None
     status: DocumentStatus
     can_reupload: bool = False
+    reupload_requested: bool = False
+    reupload_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ReuploadRequestCreate(BaseModel):
+    reason: Optional[str] = None
