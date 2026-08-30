@@ -377,14 +377,27 @@ async function handleCreateVehicle(e) {
 // Documents Management
 async function loadDocuments() {
   if (state.vehicles.length === 0) await loadVehicles();
-  const vehicleId = document.getElementById('doc-vehicle-id').value;
+  
+  const sel = document.getElementById('doc-vehicle-id');
+  if (!sel) return;
+
+  // Auto-select the first available vehicle if none is selected
+  if (!sel.value && state.vehicles.length > 0) {
+    sel.value = state.vehicles[0].id;
+  }
+
+  const vehicleId = sel.value;
   if (!vehicleId) return;
 
   try {
     const res = await fetch(`${API_BASE}/documents/vehicle/${vehicleId}`, {
       headers: { 'Authorization': `Bearer ${state.token}` }
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      const tbody = document.getElementById('tbody-documents');
+      if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--color-error);">Failed to load documents for this vehicle.</td></tr>`;
+      return;
+    }
 
     const docs = await res.json();
     renderDocumentsTable(docs);
