@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from typing import Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from app.db.models.document import DocumentType, DocumentStatus
 
 class DocumentBase(BaseModel):
@@ -32,6 +32,11 @@ class DocumentResponse(DocumentBase):
     reupload_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+    @field_validator('can_reupload', 'reupload_requested', mode='before')
+    @classmethod
+    def handle_null_booleans(cls, v):
+        return False if v is None else v
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -134,11 +134,20 @@ def grant_reupload_permission(db: Session, document_id: int, admin_id: int) -> D
 
 def get_documents_for_vehicle(db: Session, vehicle_id: int) -> List[Document]:
     docs = db.query(Document).filter(Document.vehicle_id == vehicle_id).all()
+    updated = False
     for doc in docs:
+        if doc.can_reupload is None:
+            doc.can_reupload = False
+            updated = True
+        if doc.reupload_requested is None:
+            doc.reupload_requested = False
+            updated = True
         new_status = compute_document_status(doc.expiry_date)
         if doc.status != new_status:
             doc.status = new_status
-    db.commit()
+            updated = True
+    if updated:
+        db.commit()
     return docs
 
 def get_document_by_id(db: Session, document_id: int) -> Document:
