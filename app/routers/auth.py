@@ -18,40 +18,15 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
     """Public registration for DRIVER or ADMIN accounts (requires admin_access_code for ADMIN)."""
     return auth_service.register_user(db, data)
 
+from fastapi.security import OAuth2PasswordRequestForm
+
 @router.post("/login", response_model=Token)
-async def login(
-    request: Request,
-    db: Session = Depends(get_db),
-    login_data: Optional[LoginRequest] = Body(None)
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
 ):
     """Authenticate user and return JWT access and refresh tokens."""
-    email = None
-    password = None
-
-    if login_data and login_data.email and login_data.password:
-        email = login_data.email
-        password = login_data.password
-    else:
-        content_type = request.headers.get("content-type", "")
-        if "application/json" in content_type:
-            try:
-                body = await request.json()
-                email = body.get("email") or body.get("username")
-                password = body.get("password")
-            except Exception:
-                pass
-        else:
-            try:
-                form = await request.form()
-                email = form.get("username") or form.get("email")
-                password = form.get("password")
-            except Exception:
-                pass
-
-    if not email or not password:
-        raise BadRequestException("Username/email and password are required")
-
-    user = auth_service.authenticate_user(db, email, password)
+    user = auth_service.authenticate_user(db, form_data.username, form_data.password)
 
     access_token = create_access_token(
         subject=user.id,
@@ -68,6 +43,7 @@ async def login(
         refresh_token=refresh_token,
         token_type="bearer"
     )
+
 
 @router.post("/refresh", response_model=Token)
 def refresh_token(refresh_token: str, db: Session = Depends(get_db)):

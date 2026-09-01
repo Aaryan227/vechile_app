@@ -97,10 +97,14 @@ async function handleRegister(e) {
     document.getElementById('login-password').value = password;
     switchAuthTab('login');
 
+    const formData = new URLSearchParams();
+    formData.append('username', email);
+    formData.append('password', password);
+
     const loginRes = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData
     });
 
     if (loginRes.ok) {
@@ -120,11 +124,15 @@ async function handleLogin(e) {
   const email = document.getElementById('login-email').value;
   const password = document.getElementById('login-password').value;
 
+  const formData = new URLSearchParams();
+  formData.append('username', email);
+  formData.append('password', password);
+
   try {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData
     });
 
     if (!res.ok) {
