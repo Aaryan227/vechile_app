@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, status, Request
+from fastapi import APIRouter, Depends, status, Request, Body
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -21,21 +21,32 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
 @router.post("/login", response_model=Token)
 async def login(
     request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    login_data: Optional[LoginRequest] = Body(None)
 ):
     """Authenticate user and return JWT access and refresh tokens (supports OAuth2 modal & JSON)."""
     email = None
     password = None
 
-    content_type = request.headers.get("content-type", "")
-    if "application/json" in content_type:
-        body = await request.json()
-        email = body.get("email") or body.get("username")
-        password = body.get("password")
+    if login_data and login_data.email and login_data.password:
+        email = login_data.email
+        password = login_data.password
     else:
-        form = await request.form()
-        email = form.get("username") or form.get("email")
-        password = form.get("password")
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type:
+            try:
+                body = await request.json()
+                email = body.get("email") or body.get("username")
+                password = body.get("password")
+            except Exception:
+                pass
+        else:
+            try:
+                form = await request.form()
+                email = form.get("username") or form.get("email")
+                password = form.get("password")
+            except Exception:
+                pass
 
     if not email or not password:
         raise BadRequestException("Email/username and password are required")
