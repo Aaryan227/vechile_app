@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, status
+from typing import Optional
+from fastapi import APIRouter, Depends, status, Request
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.db.models.user import User, UserRole
 from app.core.dependencies import get_current_user
 from app.core.security import create_access_token, create_refresh_token, decode_token
-from app.core.exceptions import CredentialsException
+from app.core.exceptions import CredentialsException, BadRequestException
 from app.schemas.auth import LoginRequest, RegisterRequest, Token, PasswordChange
 from app.schemas.user import UserResponse
 from app.services import auth_service
@@ -17,9 +19,28 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
     return auth_service.register_user(db, data)
 
 @router.post("/login", response_model=Token)
-def login(data: LoginRequest, db: Session = Depends(get_db)):
-    """Authenticate user and return JWT access and refresh tokens."""
-    user = auth_service.authenticate_user(db, data.email, data.password)
+async def login(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Authenticate user and return JWT access and refresh tokens (supports OAuth2 modal & JSON)."""
+    email = None
+    password = None
+
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        body = await request.json()
+        email = body.get("email") or body.get("username")
+        password = body.get("password")
+    else:
+        form = await request.form()
+        email = form.get("username") or form.get("email")
+        password = form.get("password")
+
+    if not email or not password:
+        raise BadRequestException("Email/username and password are required")
+
+    user = auth_service.authenticate_user(db, email, password)
     access_token = create_access_token(subject=user.id, role=user.role.value)
     refresh_token = create_refresh_token(subject=user.id, role=user.role.value)
     return Token(access_token=access_token, refresh_token=refresh_token)
