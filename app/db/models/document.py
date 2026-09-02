@@ -7,7 +7,8 @@ from app.db.session import Base
 class DocumentType(str, enum.Enum):
     RC = "RC"
     INSURANCE = "INSURANCE"
-    PERMIT = "PERMIT"
+    NATIONAL_PERMIT ="NATIONAL_PERMIT"
+    STATE_PERMIT = "STATE_PERMIT"
     FITNESS = "FITNESS"
     PUC = "PUC"
     OTHER = "OTHER"
