@@ -8,8 +8,7 @@ class DocumentType(str, enum.Enum):
     RC = "RC"
     INSURANCE = "INSURANCE"
     NATIONAL_PERMIT ="NATIONAL_PERMIT"
-    STATE_PERMIT = "STATE_PERMIT"
-    FITNESS = "FITNESS"
+    PERMIT = "PERMIT"
     PUC = "PUC"
     OTHER = "OTHER"
 
