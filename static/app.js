@@ -1077,21 +1077,28 @@ async function handleDeleteTax(taxId, vehicleId) {
 
 // Receipt Modal Handlers
 function openTaxReceiptModal(taxId, vehicleId, details) {
+  const currentVehId = vehicleId || (document.getElementById('tax-vehicle-id') ? document.getElementById('tax-vehicle-id').value : '');
+  const modal = document.getElementById('modal-upload-tax-receipt');
+  if (!modal) return;
   document.getElementById('receipt-tax-id').value = taxId;
-  document.getElementById('receipt-vehicle-id').value = vehicleId;
-  document.getElementById('receipt-tax-details').value = details;
+  document.getElementById('receipt-vehicle-id').value = currentVehId;
+  document.getElementById('receipt-tax-details').value = details || `Tax #${taxId}`;
   document.getElementById('receipt-tax-file').value = '';
-  document.getElementById('modal-upload-tax-receipt').classList.add('active');
+  modal.classList.add('active');
 }
 
 function closeTaxReceiptModal() {
-  document.getElementById('modal-upload-tax-receipt').classList.remove('active');
+  const modal = document.getElementById('modal-upload-tax-receipt');
+  if (modal) modal.classList.remove('active');
 }
 
 async function handleTaxReceiptUploadSubmit(e) {
   e.preventDefault();
   const taxId = document.getElementById('receipt-tax-id').value;
-  const vehicleId = document.getElementById('receipt-vehicle-id').value;
+  let vehicleId = document.getElementById('receipt-vehicle-id').value;
+  if (!vehicleId) {
+    vehicleId = document.getElementById('tax-vehicle-id') ? document.getElementById('tax-vehicle-id').value : '';
+  }
   const fileInput = document.getElementById('receipt-tax-file');
 
   if (!fileInput.files || fileInput.files.length === 0) {
@@ -1103,6 +1110,7 @@ async function handleTaxReceiptUploadSubmit(e) {
   formData.append('file', fileInput.files[0]);
 
   try {
+    showToast('Uploading receipt...', 'info');
     const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/taxes/${taxId}/receipt`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${state.token}` },
@@ -1110,7 +1118,7 @@ async function handleTaxReceiptUploadSubmit(e) {
     });
 
     if (!res.ok) {
-      const err = await res.json();
+      const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to upload receipt');
     }
 
@@ -1418,6 +1426,40 @@ async function handleExportTaxesExcel() {
     a.remove();
     window.URL.revokeObjectURL(url);
     showToast('Tax report downloaded successfully!', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// Tanker Daily Report Excel Export
+async function handleExportExcel() {
+  try {
+    showToast('Generating Tanker Daily Reports Excel...', 'info');
+    const monthSelect = document.getElementById('filter-month');
+    const month = monthSelect ? monthSelect.value : '';
+    let url = `${API_BASE}/tanker-reports/export`;
+    if (month) {
+      url += `?month=${month}`;
+    }
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to export tanker reports');
+    }
+
+    const blob = await res.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = `Tanker_Daily_Report_${month ? 'Month_' + month : 'All'}_${new Date().getFullYear()}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+    showToast('Tanker report downloaded successfully!', 'success');
   } catch (err) {
     showToast(err.message, 'error');
   }
