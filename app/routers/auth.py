@@ -18,35 +18,59 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
     """Public registration for DRIVER or ADMIN accounts (requires admin_access_code for ADMIN)."""
     return auth_service.register_user(db, data)
 
-@router.post("/login", response_model=Token)
+@router.post(
+    "/login",
+    response_model=Token,
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "email": {"type": "string", "example": "admin@kingspetroleum.com"},
+                            "password": {"type": "string", "example": "Admin@123456"}
+                        },
+                        "required": ["email", "password"]
+                    }
+                },
+                "application/x-www-form-urlencoded": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "username": {"type": "string", "example": "admin@kingspetroleum.com"},
+                            "password": {"type": "string", "example": "Admin@123456"}
+                        },
+                        "required": ["username", "password"]
+                    }
+                }
+            }
+        }
+    }
+)
 async def login(
     request: Request,
-    db: Session = Depends(get_db),
-    login_data: Optional[LoginRequest] = Body(None)
+    db: Session = Depends(get_db)
 ):
     """Authenticate user and return JWT access and refresh tokens (supports OAuth2 modal & JSON)."""
     email = None
     password = None
 
-    if login_data and login_data.email and login_data.password:
-        email = login_data.email
-        password = login_data.password
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        try:
+            body = await request.json()
+            email = body.get("email") or body.get("username")
+            password = body.get("password")
+        except Exception:
+            pass
     else:
-        content_type = request.headers.get("content-type", "")
-        if "application/json" in content_type:
-            try:
-                body = await request.json()
-                email = body.get("email") or body.get("username")
-                password = body.get("password")
-            except Exception:
-                pass
-        else:
-            try:
-                form = await request.form()
-                email = form.get("username") or form.get("email")
-                password = form.get("password")
-            except Exception:
-                pass
+        try:
+            form = await request.form()
+            email = form.get("username") or form.get("email")
+            password = form.get("password")
+        except Exception:
+            pass
 
     if not email or not password:
         raise BadRequestException("Username/email and password are required")
