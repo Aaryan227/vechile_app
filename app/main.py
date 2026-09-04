@@ -15,7 +15,8 @@ from app.routers import (
     documents_router,
     tanker_reports_router,
     admin_router,
-    reports_router
+    reports_router,
+    taxes_router
 )
 from app.db.models.user import User, UserRole
 from app.db.models.vehicle import Vehicle
@@ -123,6 +124,7 @@ app.include_router(documents_router, prefix=settings.API_V1_STR)
 app.include_router(tanker_reports_router, prefix=settings.API_V1_STR)
 app.include_router(admin_router, prefix=settings.API_V1_STR)
 app.include_router(reports_router, prefix=settings.API_V1_STR)
+app.include_router(taxes_router, prefix=settings.API_V1_STR)
 
 # Serve Web Frontend static files
 static_dir = os.path.join(os.path.dirname(__file__), "..", "static")

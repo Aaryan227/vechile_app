@@ -184,15 +184,30 @@ function updateUserUI() {
     userRoleBadge.innerText = state.user.role.toUpperCase();
 
     const navDashboard = document.getElementById('nav-item-dashboard');
+    const btnAddTax = document.getElementById('btn-add-tax-toggle');
+    const btnExportTax = document.getElementById('btn-export-tax-excel');
+    const btnAddCharge = document.getElementById('btn-add-charge-toggle');
+    const btnAddChallan = document.getElementById('btn-add-challan-toggle');
+    const btnSaveFastag = document.getElementById('btn-save-fastag');
 
     if (state.user.role === 'admin') {
       userRoleBadge.className = 'badge badge-info';
       if (btnAddVehicle) btnAddVehicle.style.display = 'inline-flex';
       if (navDashboard) navDashboard.style.display = 'inline-block';
+      if (btnAddTax) btnAddTax.style.display = 'inline-flex';
+      if (btnExportTax) btnExportTax.style.display = 'inline-flex';
+      if (btnAddCharge) btnAddCharge.style.display = 'inline-flex';
+      if (btnAddChallan) btnAddChallan.style.display = 'inline-flex';
+      if (btnSaveFastag) btnSaveFastag.style.display = 'inline-block';
     } else {
       userRoleBadge.className = 'badge badge-success';
       if (btnAddVehicle) btnAddVehicle.style.display = 'none';
       if (navDashboard) navDashboard.style.display = 'none'; // Hide Fleet Dashboard for Drivers
+      if (btnAddTax) btnAddTax.style.display = 'none';
+      if (btnExportTax) btnExportTax.style.display = 'none';
+      if (btnAddCharge) btnAddCharge.style.display = 'none';
+      if (btnAddChallan) btnAddChallan.style.display = 'none';
+      if (btnSaveFastag) btnSaveFastag.style.display = 'none';
     }
   }
 }
@@ -229,6 +244,7 @@ function switchTab(tabId) {
   if (tabId === 'dashboard' && state.user && state.user.role === 'admin') loadDashboardMetrics();
   if (tabId === 'vehicles') loadVehicles();
   if (tabId === 'documents') loadDocuments();
+  if (tabId === 'taxes') loadTaxes();
   if (tabId === 'tanker-reports') loadTankerReports();
 }
 
@@ -252,6 +268,10 @@ async function loadDashboardMetrics() {
     document.getElementById('metric-expired-docs').innerText = data.expired_documents;
     document.getElementById('metric-expiring-docs').innerText = data.documents_expiring_soon;
     document.getElementById('metric-monthly-freight').innerText = `₹${data.total_freight_this_month.toLocaleString()}`;
+
+    if (document.getElementById('metric-active-taxes')) document.getElementById('metric-active-taxes').innerText = data.active_taxes || 0;
+    if (document.getElementById('metric-due-soon-taxes')) document.getElementById('metric-due-soon-taxes').innerText = data.taxes_due_soon || 0;
+    if (document.getElementById('metric-overdue-taxes')) document.getElementById('metric-overdue-taxes').innerText = data.taxes_overdue || 0;
 
     // Load Expiry Alerts list
     const resExp = await fetch(`${API_BASE}/documents/expiring-soon?days=30`, {
@@ -313,8 +333,9 @@ function renderVehiclesTable() {
       <td>${v.chassis_number || 'N/A'}</td>
       <td><span class="badge badge-${v.status.toLowerCase()}">${v.status}</span></td>
       <td>
-        <div style="display: flex; gap: 0.35rem;">
-          <button class="btn btn-secondary btn-sm" onclick="selectVehicleDocs(${v.id})">View Docs</button>
+        <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+          <button class="btn btn-secondary btn-sm" onclick="selectVehicleDocs(${v.id})">Docs</button>
+          <button class="btn btn-secondary btn-sm" onclick="selectVehicleTaxes(${v.id})">Tax & Charges</button>
           ${isAdmin ? `<button class="btn btn-accent btn-sm" onclick="openAssignDriverModal(${v.id}, '${v.vehicle_number}')">Assign Driver</button>` : ''}
         </div>
       </td>
@@ -325,12 +346,14 @@ function renderVehiclesTable() {
 function populateVehicleDropdowns() {
   const docSelect = document.getElementById('doc-vehicle-id');
   const tankerSelect = document.getElementById('tanker-vehicle-id');
+  const taxSelect = document.getElementById('tax-vehicle-id');
 
   const optionsHTML = `<option value="">-- Choose Vehicle --</option>` +
     state.vehicles.map(v => `<option value="${v.id}">${v.vehicle_number} (${v.vehicle_class})</option>`).join('');
 
   if (docSelect) docSelect.innerHTML = optionsHTML;
   if (tankerSelect) tankerSelect.innerHTML = optionsHTML;
+  if (taxSelect) taxSelect.innerHTML = optionsHTML;
 }
 
 function toggleAddVehicleForm() {
@@ -791,6 +814,610 @@ async function handleAllowReupload(docId) {
 
     showToast('Re-upload permission granted for driver!', 'success');
     loadDocuments();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// ==========================================
+// Vehicle Tax & Government Charges Module (Frontend)
+// ==========================================
+
+let activeTaxSubtab = 'taxes';
+
+function switchTaxSubtab(tabName) {
+  activeTaxSubtab = tabName;
+  document.querySelectorAll('.subtab-btn').forEach(btn => btn.classList.remove('active'));
+  document.querySelectorAll('.subtab-pane').forEach(pane => pane.style.display = 'none');
+
+  const activeBtn = document.getElementById(`subtab-btn-${tabName}`);
+  const activePane = document.getElementById(`subtab-content-${tabName}`);
+  if (activeBtn) activeBtn.classList.add('active');
+  if (activePane) activePane.style.display = 'block';
+
+  const sel = document.getElementById('tax-vehicle-id');
+  const vehicleId = sel ? sel.value : null;
+  if (!vehicleId) return;
+
+  if (tabName === 'taxes' || tabName === 'history') loadTaxesForSelectedVehicle();
+  if (tabName === 'charges') loadGovernmentCharges(vehicleId);
+  if (tabName === 'challans') loadChallans(vehicleId);
+  if (tabName === 'fastag') loadFASTag(vehicleId);
+}
+
+function selectVehicleTaxes(vehicleId) {
+  switchTab('taxes');
+  const sel = document.getElementById('tax-vehicle-id');
+  if (sel) {
+    sel.value = vehicleId;
+    loadTaxesForSelectedVehicle();
+  }
+}
+
+async function loadTaxes() {
+  if (state.vehicles.length === 0) await loadVehicles();
+  const sel = document.getElementById('tax-vehicle-id');
+  if (!sel) return;
+
+  if (!sel.value && state.vehicles.length > 0) {
+    sel.value = state.vehicles[0].id;
+  }
+  loadTaxesForSelectedVehicle();
+}
+
+async function loadTaxesForSelectedVehicle() {
+  const sel = document.getElementById('tax-vehicle-id');
+  if (!sel || !sel.value) return;
+  const vehicleId = sel.value;
+
+  const veh = state.vehicles.find(v => v.id === parseInt(vehicleId));
+  const infoSpan = document.getElementById('tax-vehicle-info');
+  if (infoSpan && veh) {
+    infoSpan.innerText = `${veh.make || ''} ${veh.model || ''} | Class: ${veh.vehicle_class}`;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/taxes`, {
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const msg = err.detail || 'Failed to load taxes.';
+      document.getElementById('tax-cards-container').innerHTML = `<div style="color: var(--color-error); padding: 1rem;">${msg}</div>`;
+      document.getElementById('tbody-tax-history').innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--color-error);">${msg}</td></tr>`;
+      return;
+    }
+
+    const taxes = await res.json();
+    renderTaxCards(taxes, vehicleId);
+    renderTaxHistoryTable(taxes);
+  } catch (err) {
+    console.error(err);
+  }
+
+  if (activeTaxSubtab === 'charges') loadGovernmentCharges(vehicleId);
+  if (activeTaxSubtab === 'challans') loadChallans(vehicleId);
+  if (activeTaxSubtab === 'fastag') loadFASTag(vehicleId);
+}
+
+function renderTaxCards(taxes, vehicleId) {
+  const container = document.getElementById('tax-cards-container');
+  if (!taxes || taxes.length === 0) {
+    container.innerHTML = `
+      <div style="grid-column: 1 / -1; background: var(--color-surface); padding: 2rem; border-radius: var(--radius-md); border: 1px dashed var(--color-border); text-align: center; color: var(--color-text-muted);">
+        No active tax records recorded for this vehicle.
+        ${state.user && state.user.role === 'admin' ? '<br><button class="btn btn-accent btn-sm" style="margin-top: 0.75rem;" onclick="toggleAddTaxForm()">+ Record Tax Payment</button>' : ''}
+      </div>`;
+    return;
+  }
+
+  const isAdmin = state.user && state.user.role === 'admin';
+
+  // Sort: Active and Due Soon first, then Overdue, then Expired
+  const displayTaxes = [...taxes].slice(0, 6);
+
+  container.innerHTML = displayTaxes.map(t => {
+    const statusClass = `badge-${t.status.toLowerCase()}`;
+    const amountFmt = Number(t.amount).toLocaleString('en-IN');
+    const validUntilStr = t.valid_until ? new Date(t.valid_until).toLocaleDateString('en-GB') : 'N/A';
+    const paidStr = t.payment_date ? new Date(t.payment_date).toLocaleDateString('en-GB') : 'Unpaid';
+    const dueStr = t.due_date ? new Date(t.due_date).toLocaleDateString('en-GB') : 'N/A';
+
+    const cleanTaxType = t.tax_type.replace(/_/g, ' ');
+
+    let receiptButton = '';
+    if (t.receipt_file_url) {
+      const receiptFilename = t.receipt_file_url.split('/').pop();
+      const receiptUrl = `${API_BASE}/taxes/receipt/${receiptFilename}?token=${state.token}`;
+      receiptButton = `<a href="${receiptUrl}" target="_blank" class="btn btn-secondary btn-sm">🧾 View Receipt</a>`;
+    } else {
+      receiptButton = `<button class="btn btn-secondary btn-sm" onclick="openTaxReceiptModal(${t.id}, ${vehicleId}, '${cleanTaxType} (₹${amountFmt})')">📤 Upload Receipt</button>`;
+    }
+
+    return `
+      <div class="tax-card">
+        <div>
+          <div class="tax-card-header">
+            <div class="tax-card-title">${cleanTaxType}</div>
+            <span class="badge ${statusClass}">${t.status.replace(/_/g, ' ')}</span>
+          </div>
+          <div class="tax-card-amount">₹${amountFmt}</div>
+          <div class="tax-card-meta">
+            <span>State / Authority:</span>
+            <strong>${t.state}${t.tax_authority ? ` (${t.tax_authority})` : ''}</strong>
+          </div>
+          <div class="tax-card-meta">
+            <span>Valid Until:</span>
+            <strong>${validUntilStr}</strong>
+          </div>
+          <div class="tax-card-meta">
+            <span>${t.payment_date ? 'Paid On:' : 'Due Date:'}</span>
+            <span>${t.payment_date ? paidStr : dueStr}</span>
+          </div>
+          ${t.challan_number ? `<div class="tax-card-meta"><span>Challan Ref:</span><span>${t.challan_number}</span></div>` : ''}
+        </div>
+        <div class="tax-card-actions">
+          ${receiptButton}
+          ${isAdmin ? `<button class="btn btn-secondary btn-sm" style="color: var(--color-error);" onclick="handleDeleteTax(${t.id}, ${vehicleId})">Delete</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderTaxHistoryTable(taxes) {
+  const tbody = document.getElementById('tbody-tax-history');
+  if (!taxes || taxes.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--color-text-muted);">No history recorded yet.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = taxes.map(t => {
+    const statusClass = `badge-${t.status.toLowerCase()}`;
+    const pStart = t.period_start ? new Date(t.period_start).toLocaleDateString('en-GB') : '';
+    const pEnd = t.period_end ? new Date(t.period_end).toLocaleDateString('en-GB') : '';
+    const paid = t.payment_date ? new Date(t.payment_date).toLocaleDateString('en-GB') : 'Pending';
+    const valid = t.valid_until ? new Date(t.valid_until).toLocaleDateString('en-GB') : '';
+
+    let receiptLink = '<span style="color: var(--color-text-muted);">-</span>';
+    if (t.receipt_file_url) {
+      const receiptFilename = t.receipt_file_url.split('/').pop();
+      receiptLink = `<a href="${API_BASE}/taxes/receipt/${receiptFilename}?token=${state.token}" target="_blank" style="color: var(--color-accent); font-weight: 600;">Receipt ↗</a>`;
+    }
+
+    return `
+      <tr>
+        <td>${pStart} – ${pEnd}</td>
+        <td><strong>${t.tax_type.replace(/_/g, ' ')}</strong></td>
+        <td>${t.state}</td>
+        <td>₹${Number(t.amount).toLocaleString('en-IN')}</td>
+        <td>${paid}</td>
+        <td>${valid}</td>
+        <td><span class="badge ${statusClass}">${t.status.replace(/_/g, ' ')}</span></td>
+        <td>${t.challan_number || t.payment_reference || '-'}</td>
+        <td>${receiptLink}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function toggleAddTaxForm() {
+  const form = document.getElementById('card-add-tax');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+async function handleCreateTax(e) {
+  e.preventDefault();
+  const vehicleId = document.getElementById('tax-vehicle-id').value;
+  if (!vehicleId) {
+    showToast('Please select a vehicle first', 'error');
+    return;
+  }
+
+  const payload = {
+    tax_type: document.getElementById('tax-type').value,
+    state: document.getElementById('tax-state').value,
+    tax_authority: document.getElementById('tax-authority').value || null,
+    amount: parseFloat(document.getElementById('tax-amount').value),
+    period_start: document.getElementById('tax-period-start').value,
+    period_end: document.getElementById('tax-period-end').value,
+    payment_date: document.getElementById('tax-payment-date').value || null,
+    due_date: document.getElementById('tax-due-date').value || null,
+    valid_from: document.getElementById('tax-valid-from').value || null,
+    valid_until: document.getElementById('tax-valid-until').value,
+    payment_reference: document.getElementById('tax-payment-ref').value || null,
+    challan_number: document.getElementById('tax-challan-number').value || null,
+    notes: document.getElementById('tax-notes').value || null
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/taxes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.token}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to record tax');
+    }
+
+    showToast('Tax record saved successfully!', 'success');
+    document.getElementById('form-add-tax').reset();
+    toggleAddTaxForm();
+    loadTaxesForSelectedVehicle();
+    if (state.user && state.user.role === 'admin') loadDashboardMetrics();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handleDeleteTax(taxId, vehicleId) {
+  if (!confirm('Are you sure you want to delete this tax record?')) return;
+  try {
+    const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/taxes/${taxId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to delete tax record');
+    }
+    showToast('Tax record deleted', 'info');
+    loadTaxesForSelectedVehicle();
+    if (state.user && state.user.role === 'admin') loadDashboardMetrics();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// Receipt Modal Handlers
+function openTaxReceiptModal(taxId, vehicleId, details) {
+  document.getElementById('receipt-tax-id').value = taxId;
+  document.getElementById('receipt-vehicle-id').value = vehicleId;
+  document.getElementById('receipt-tax-details').value = details;
+  document.getElementById('receipt-tax-file').value = '';
+  document.getElementById('modal-upload-tax-receipt').classList.add('active');
+}
+
+function closeTaxReceiptModal() {
+  document.getElementById('modal-upload-tax-receipt').classList.remove('active');
+}
+
+async function handleTaxReceiptUploadSubmit(e) {
+  e.preventDefault();
+  const taxId = document.getElementById('receipt-tax-id').value;
+  const vehicleId = document.getElementById('receipt-vehicle-id').value;
+  const fileInput = document.getElementById('receipt-tax-file');
+
+  if (!fileInput.files || fileInput.files.length === 0) {
+    showToast('Please select a receipt file', 'error');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+
+  try {
+    const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/taxes/${taxId}/receipt`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${state.token}` },
+      body: formData
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to upload receipt');
+    }
+
+    showToast('Receipt uploaded successfully!', 'success');
+    closeTaxReceiptModal();
+    loadTaxesForSelectedVehicle();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// ==========================================
+// Government Charges
+// ==========================================
+
+function toggleAddChargeForm() {
+  const form = document.getElementById('card-add-charge');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+async function loadGovernmentCharges(vehicleId) {
+  try {
+    const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/government-charges`, {
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+    if (!res.ok) return;
+    const charges = await res.json();
+    renderGovernmentChargesTable(charges, vehicleId);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function renderGovernmentChargesTable(charges, vehicleId) {
+  const tbody = document.getElementById('tbody-charges');
+  if (!charges || charges.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--color-text-muted);">No government charges recorded.</td></tr>`;
+    return;
+  }
+
+  const isAdmin = state.user && state.user.role === 'admin';
+  tbody.innerHTML = charges.map(c => `
+    <tr>
+      <td><strong>${c.charge_type.replace(/_/g, ' ')}</strong></td>
+      <td>${c.state} ${c.authority ? `(${c.authority})` : ''}</td>
+      <td>${new Date(c.period_start).toLocaleDateString('en-GB')} – ${new Date(c.period_end).toLocaleDateString('en-GB')}</td>
+      <td>${new Date(c.valid_until).toLocaleDateString('en-GB')}</td>
+      <td>₹${Number(c.amount).toLocaleString('en-IN')}</td>
+      <td><span class="badge badge-${c.status.toLowerCase()}">${c.status.replace(/_/g, ' ')}</span></td>
+      <td>
+        ${isAdmin ? `<button class="btn btn-secondary btn-sm" style="color: var(--color-error);" onclick="handleDeleteCharge(${c.id}, ${vehicleId})">Delete</button>` : '-'}
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function handleCreateCharge(e) {
+  e.preventDefault();
+  const vehicleId = document.getElementById('tax-vehicle-id').value;
+  if (!vehicleId) {
+    showToast('Select a vehicle first', 'error');
+    return;
+  }
+
+  const payload = {
+    charge_type: document.getElementById('charge-type').value,
+    state: document.getElementById('charge-state').value,
+    authority: document.getElementById('charge-authority').value || null,
+    amount: parseFloat(document.getElementById('charge-amount').value),
+    period_start: document.getElementById('charge-period-start').value,
+    period_end: document.getElementById('charge-period-end').value,
+    payment_date: document.getElementById('charge-payment-date').value || null,
+    valid_until: document.getElementById('charge-valid-until').value,
+    payment_reference: document.getElementById('charge-payment-ref').value || null
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/government-charges`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.token}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to save charge');
+    }
+
+    showToast('Government charge recorded!', 'success');
+    document.getElementById('form-add-charge').reset();
+    toggleAddChargeForm();
+    loadGovernmentCharges(vehicleId);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handleDeleteCharge(chargeId, vehicleId) {
+  if (!confirm('Delete this government charge record?')) return;
+  try {
+    const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/government-charges/${chargeId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+    if (res.ok) {
+      showToast('Charge deleted', 'info');
+      loadGovernmentCharges(vehicleId);
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// ==========================================
+// Challans
+// ==========================================
+
+function toggleAddChallanForm() {
+  const form = document.getElementById('card-add-challan');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+async function loadChallans(vehicleId) {
+  try {
+    const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/challans`, {
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+    if (!res.ok) return;
+    const challans = await res.json();
+    renderChallansTable(challans, vehicleId);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function renderChallansTable(challans, vehicleId) {
+  const tbody = document.getElementById('tbody-challans');
+  if (!challans || challans.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--color-text-muted);">No challans recorded.</td></tr>`;
+    return;
+  }
+
+  const isAdmin = state.user && state.user.role === 'admin';
+  tbody.innerHTML = challans.map(ch => `
+    <tr>
+      <td><strong>${ch.challan_number}</strong></td>
+      <td>${ch.authority || '-'}</td>
+      <td>${ch.reason || '-'}</td>
+      <td>${new Date(ch.issue_date).toLocaleDateString('en-GB')}</td>
+      <td>${ch.due_date ? new Date(ch.due_date).toLocaleDateString('en-GB') : '-'}</td>
+      <td>₹${Number(ch.amount).toLocaleString('en-IN')}</td>
+      <td><span class="badge badge-${ch.status.toLowerCase()}">${ch.status}</span></td>
+      <td>
+        ${isAdmin ? `<button class="btn btn-secondary btn-sm" style="color: var(--color-error);" onclick="handleDeleteChallan(${ch.id}, ${vehicleId})">Delete</button>` : '-'}
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function handleCreateChallan(e) {
+  e.preventDefault();
+  const vehicleId = document.getElementById('tax-vehicle-id').value;
+  if (!vehicleId) {
+    showToast('Select a vehicle first', 'error');
+    return;
+  }
+
+  const payload = {
+    challan_number: document.getElementById('challan-num').value,
+    authority: document.getElementById('challan-authority').value || null,
+    issue_date: document.getElementById('challan-issue-date').value,
+    amount: parseFloat(document.getElementById('challan-amount').value),
+    due_date: document.getElementById('challan-due-date').value || null,
+    status: document.getElementById('challan-status').value,
+    reason: document.getElementById('challan-reason').value || null
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/challans`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.token}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to save challan');
+    }
+
+    showToast('Challan record saved!', 'success');
+    document.getElementById('form-add-challan').reset();
+    toggleAddChallanForm();
+    loadChallans(vehicleId);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handleDeleteChallan(challanId, vehicleId) {
+  if (!confirm('Delete this challan record?')) return;
+  try {
+    const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/challans/${challanId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+    if (res.ok) {
+      showToast('Challan deleted', 'info');
+      loadChallans(vehicleId);
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// ==========================================
+// FASTag
+// ==========================================
+
+async function loadFASTag(vehicleId) {
+  try {
+    const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/fastag`, {
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+    if (!res.ok) return;
+    const tag = await res.json();
+
+    document.getElementById('fastag-number').value = tag.tag_number || '';
+    document.getElementById('fastag-provider').value = tag.tag_provider || '';
+    document.getElementById('fastag-status').value = tag.tag_status || 'ACTIVE';
+    document.getElementById('fastag-account-ref').value = tag.linked_account_ref || '';
+    document.getElementById('fastag-balance').value = tag.last_balance !== null && tag.last_balance !== undefined ? tag.last_balance : '';
+    document.getElementById('fastag-notes').value = tag.notes || '';
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function handleSaveFASTag(e) {
+  e.preventDefault();
+  const vehicleId = document.getElementById('tax-vehicle-id').value;
+  if (!vehicleId) {
+    showToast('Select a vehicle first', 'error');
+    return;
+  }
+
+  const payload = {
+    tag_number: document.getElementById('fastag-number').value || null,
+    tag_provider: document.getElementById('fastag-provider').value || null,
+    tag_status: document.getElementById('fastag-status').value,
+    linked_account_ref: document.getElementById('fastag-account-ref').value || null,
+    last_balance: document.getElementById('fastag-balance').value ? parseFloat(document.getElementById('fastag-balance').value) : null,
+    notes: document.getElementById('fastag-notes').value || null
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/fastag`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.token}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to update FASTag information');
+    }
+
+    showToast('FASTag details updated successfully!', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// ==========================================
+// Excel Export
+// ==========================================
+
+async function handleExportTaxesExcel() {
+  try {
+    showToast('Generating Fleet Tax Excel report...', 'info');
+    const res = await fetch(`${API_BASE}/admin/taxes/export`, {
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to export tax report');
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Fleet_Taxes_Export_${new Date().toISOString().split('T')[0]}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+    showToast('Tax report downloaded successfully!', 'success');
   } catch (err) {
     showToast(err.message, 'error');
   }

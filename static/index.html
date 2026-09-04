@@ -28,6 +28,7 @@
         <li id="nav-item-dashboard"><a class="nav-link" data-tab="dashboard" onclick="switchTab('dashboard')">Dashboard</a></li>
         <li id="nav-item-vehicles"><a class="nav-link" data-tab="vehicles" onclick="switchTab('vehicles')">Vehicles</a></li>
         <li id="nav-item-documents"><a class="nav-link" data-tab="documents" onclick="switchTab('documents')">Documents</a></li>
+        <li id="nav-item-taxes"><a class="nav-link" data-tab="taxes" onclick="switchTab('taxes')">Tax & Charges</a></li>
         <li id="nav-item-tanker-reports"><a class="nav-link" data-tab="tanker-reports" onclick="switchTab('tanker-reports')">Tanker Reports</a></li>
       </ul>
 
@@ -156,6 +157,24 @@
             <div class="metric-label">Monthly Freight</div>
             <div class="metric-value" id="metric-monthly-freight">₹0</div>
             <div class="metric-trend" style="color: var(--color-success);">Current Month</div>
+          </div>
+
+          <div class="metric-card" style="cursor: pointer;" onclick="switchTab('taxes')">
+            <div class="metric-label">Active Taxes</div>
+            <div class="metric-value" id="metric-active-taxes" style="color: var(--color-success);">0</div>
+            <div class="metric-trend" style="color: var(--color-success);">Fleet Compliance</div>
+          </div>
+
+          <div class="metric-card" style="cursor: pointer;" onclick="switchTab('taxes')">
+            <div class="metric-label">Taxes Due Soon</div>
+            <div class="metric-value" id="metric-due-soon-taxes" style="color: var(--color-warning);">0</div>
+            <div class="metric-trend" style="color: var(--color-warning);">Upcoming (30 Days)</div>
+          </div>
+
+          <div class="metric-card" style="cursor: pointer;" onclick="switchTab('taxes')">
+            <div class="metric-label">Overdue Taxes</div>
+            <div class="metric-value" id="metric-overdue-taxes" style="color: var(--color-error);">0</div>
+            <div class="metric-trend" style="color: var(--color-error);">Immediate Attention</div>
           </div>
         </div>
 
@@ -473,6 +492,390 @@
           </table>
         </div>
       </section>
+
+      <!-- 6. TAX & GOVERNMENT CHARGES SECTION -->
+      <section id="section-taxes" class="section">
+        <div class="section-header">
+          <div>
+            <h1 class="section-title">Vehicle Tax & Government Charges</h1>
+            <p class="section-subtitle">Road taxes, permits, challans and FASTag tracking across fleet</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button id="btn-export-tax-excel" class="btn btn-primary" onclick="handleExportTaxesExcel()">
+              📥 Export to Excel (.xlsx)
+            </button>
+            <button id="btn-add-tax-toggle" class="btn btn-accent" onclick="toggleAddTaxForm()">
+              + Record Payment
+            </button>
+          </div>
+        </div>
+
+        <!-- Vehicle Selector Bar -->
+        <div class="card-form" style="margin-bottom: 1.5rem; padding: 1rem 1.25rem;">
+          <div style="display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 280px;">
+              <label style="font-weight: 700; white-space: nowrap;">Active Vehicle:</label>
+              <select id="tax-vehicle-id" class="form-control" onchange="loadTaxesForSelectedVehicle()">
+                <option value="">-- Select Vehicle --</option>
+              </select>
+            </div>
+            <div style="display: flex; gap: 0.75rem;">
+              <span id="tax-vehicle-info" style="font-size: 0.9rem; color: var(--color-text-muted); align-self: center;"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subtabs Navigation -->
+        <div class="subtab-bar">
+          <button class="subtab-btn active" id="subtab-btn-taxes" onclick="switchTaxSubtab('taxes')">Taxes</button>
+          <button class="subtab-btn" id="subtab-btn-charges" onclick="switchTaxSubtab('charges')">Government Charges</button>
+          <button class="subtab-btn" id="subtab-btn-challans" onclick="switchTaxSubtab('challans')">Challans / Penalties</button>
+          <button class="subtab-btn" id="subtab-btn-fastag" onclick="switchTaxSubtab('fastag')">FASTag</button>
+          <button class="subtab-btn" id="subtab-btn-history" onclick="switchTaxSubtab('history')">Payment History</button>
+        </div>
+
+        <!-- 1. Add Tax Form (Collapsible) -->
+        <div id="card-add-tax" class="card-form" style="display: none; margin-bottom: 1.5rem;">
+          <h3 style="margin-bottom: 1rem; color: var(--color-primary);">Record Vehicle Tax</h3>
+          <form id="form-add-tax" onsubmit="handleCreateTax(event)">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Tax Type *</label>
+                <select id="tax-type" class="form-control" required>
+                  <option value="ROAD_TAX">Road Tax</option>
+                  <option value="MOTOR_VEHICLE_TAX">Motor Vehicle Tax</option>
+                  <option value="ADDITIONAL_MOTOR_VEHICLE_TAX">Additional Motor Vehicle Tax</option>
+                  <option value="STATE_VEHICLE_TAX">State Vehicle Tax</option>
+                  <option value="OTHER_TAX">Other Tax</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>State *</label>
+                <input type="text" id="tax-state" class="form-control" placeholder="e.g. West Bengal, Maharashtra, Punjab" required>
+              </div>
+
+              <div class="form-group">
+                <label>Tax Authority</label>
+                <input type="text" id="tax-authority" class="form-control" placeholder="e.g. RTO Kolkata">
+              </div>
+
+              <div class="form-group">
+                <label>Amount (₹) *</label>
+                <input type="number" step="0.01" id="tax-amount" class="form-control" placeholder="42500" required>
+              </div>
+
+              <div class="form-group">
+                <label>Period Start *</label>
+                <input type="date" id="tax-period-start" class="form-control" required>
+              </div>
+
+              <div class="form-group">
+                <label>Period End *</label>
+                <input type="date" id="tax-period-end" class="form-control" required>
+              </div>
+
+              <div class="form-group">
+                <label>Payment Date</label>
+                <input type="date" id="tax-payment-date" class="form-control">
+              </div>
+
+              <div class="form-group">
+                <label>Due Date</label>
+                <input type="date" id="tax-due-date" class="form-control">
+              </div>
+
+              <div class="form-group">
+                <label>Valid From</label>
+                <input type="date" id="tax-valid-from" class="form-control">
+              </div>
+
+              <div class="form-group">
+                <label>Valid Until *</label>
+                <input type="date" id="tax-valid-until" class="form-control" required>
+              </div>
+
+              <div class="form-group">
+                <label>Payment Reference / Txn ID</label>
+                <input type="text" id="tax-payment-ref" class="form-control" placeholder="UPI / NEFT / Challan Ref">
+              </div>
+
+              <div class="form-group">
+                <label>Challan Number</label>
+                <input type="text" id="tax-challan-number" class="form-control" placeholder="CH-1092837">
+              </div>
+
+              <div class="form-group" style="grid-column: span 2;">
+                <label>Notes</label>
+                <input type="text" id="tax-notes" class="form-control" placeholder="Additional details or remarks">
+              </div>
+            </div>
+
+            <div style="margin-top: 1.25rem; display: flex; gap: 0.75rem;">
+              <button type="submit" class="btn btn-accent">Save Tax Record</button>
+              <button type="button" class="btn btn-secondary" onclick="toggleAddTaxForm()">Cancel</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- 2. Add Government Charge Form (Collapsible) -->
+        <div id="card-add-charge" class="card-form" style="display: none; margin-bottom: 1.5rem;">
+          <h3 style="margin-bottom: 1rem; color: var(--color-primary);">Record Government Charge / Fee</h3>
+          <form id="form-add-charge" onsubmit="handleCreateCharge(event)">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Charge Type *</label>
+                <select id="charge-type" class="form-control" required>
+                  <option value="PERMIT_FEE">Permit Fee</option>
+                  <option value="NATIONAL_PERMIT_FEE">National Permit Fee</option>
+                  <option value="STATE_PERMIT_FEE">State Permit Fee</option>
+                  <option value="OTHER_GOVERNMENT_CHARGE">Other Government Charge</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>State *</label>
+                <input type="text" id="charge-state" class="form-control" placeholder="e.g. West Bengal, Maharashtra" required>
+              </div>
+
+              <div class="form-group">
+                <label>Authority</label>
+                <input type="text" id="charge-authority" class="form-control" placeholder="e.g. Transport Authority">
+              </div>
+
+              <div class="form-group">
+                <label>Amount (₹) *</label>
+                <input type="number" step="0.01" id="charge-amount" class="form-control" placeholder="15000" required>
+              </div>
+
+              <div class="form-group">
+                <label>Period Start *</label>
+                <input type="date" id="charge-period-start" class="form-control" required>
+              </div>
+
+              <div class="form-group">
+                <label>Period End *</label>
+                <input type="date" id="charge-period-end" class="form-control" required>
+              </div>
+
+              <div class="form-group">
+                <label>Payment Date</label>
+                <input type="date" id="charge-payment-date" class="form-control">
+              </div>
+
+              <div class="form-group">
+                <label>Valid Until *</label>
+                <input type="date" id="charge-valid-until" class="form-control" required>
+              </div>
+
+              <div class="form-group" style="grid-column: span 2;">
+                <label>Payment Reference / Receipt ID</label>
+                <input type="text" id="charge-payment-ref" class="form-control" placeholder="Ref / Txn ID">
+              </div>
+            </div>
+
+            <div style="margin-top: 1.25rem; display: flex; gap: 0.75rem;">
+              <button type="submit" class="btn btn-accent">Save Charge</button>
+              <button type="button" class="btn btn-secondary" onclick="toggleAddChargeForm()">Cancel</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- 3. Add Challan Form (Collapsible) -->
+        <div id="card-add-challan" class="card-form" style="display: none; margin-bottom: 1.5rem;">
+          <h3 style="margin-bottom: 1rem; color: var(--color-primary);">Record Traffic / Transport Challan</h3>
+          <form id="form-add-challan" onsubmit="handleCreateChallan(event)">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Challan Number *</label>
+                <input type="text" id="challan-num" class="form-control" placeholder="WB2026-CH-998" required>
+              </div>
+
+              <div class="form-group">
+                <label>Issuing Authority</label>
+                <input type="text" id="challan-authority" class="form-control" placeholder="Traffic Police / Transport Dept">
+              </div>
+
+              <div class="form-group">
+                <label>Issue Date *</label>
+                <input type="date" id="challan-issue-date" class="form-control" required>
+              </div>
+
+              <div class="form-group">
+                <label>Amount (₹) *</label>
+                <input type="number" step="0.01" id="challan-amount" class="form-control" placeholder="2000" required>
+              </div>
+
+              <div class="form-group">
+                <label>Payment Due Date</label>
+                <input type="date" id="challan-due-date" class="form-control">
+              </div>
+
+              <div class="form-group">
+                <label>Status</label>
+                <select id="challan-status" class="form-control">
+                  <option value="UNPAID">UNPAID</option>
+                  <option value="PAID">PAID</option>
+                  <option value="OVERDUE">OVERDUE</option>
+                  <option value="DISPUTED">DISPUTED</option>
+                </select>
+              </div>
+
+              <div class="form-group" style="grid-column: span 2;">
+                <label>Violation Reason / Offense</label>
+                <input type="text" id="challan-reason" class="form-control" placeholder="e.g. Overloading, Route permit violation">
+              </div>
+            </div>
+
+            <div style="margin-top: 1.25rem; display: flex; gap: 0.75rem;">
+              <button type="submit" class="btn btn-accent">Save Challan</button>
+              <button type="button" class="btn btn-secondary" onclick="toggleAddChallanForm()">Cancel</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- 4. Subtab Content: Taxes (Cards Grid) -->
+        <div id="subtab-content-taxes" class="subtab-pane">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3 style="color: var(--color-primary);">Current Applicable Taxes</h3>
+          </div>
+          <div id="tax-cards-container" class="tax-cards-grid">
+            <div style="color: var(--color-text-muted); padding: 1.5rem;">Select a vehicle to view taxes.</div>
+          </div>
+        </div>
+
+        <!-- 5. Subtab Content: Government Charges (Table) -->
+        <div id="subtab-content-charges" class="subtab-pane" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3 style="color: var(--color-primary);">Government & Permit Charges</h3>
+            <button id="btn-add-charge-toggle" class="btn btn-secondary btn-sm" onclick="toggleAddChargeForm()">+ Add Charge</button>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Charge Type</th>
+                  <th>State & Authority</th>
+                  <th>Valid Period</th>
+                  <th>Valid Until</th>
+                  <th>Amount (₹)</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-charges">
+                <tr><td colspan="7" style="text-align: center; color: var(--color-text-muted);">No charges recorded.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 6. Subtab Content: Challans (Table) -->
+        <div id="subtab-content-challans" class="subtab-pane" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3 style="color: var(--color-primary);">Traffic / Transport Challans</h3>
+            <button id="btn-add-challan-toggle" class="btn btn-secondary btn-sm" onclick="toggleAddChallanForm()">+ Record Challan</button>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Challan No</th>
+                  <th>Authority</th>
+                  <th>Reason</th>
+                  <th>Issue Date</th>
+                  <th>Due Date</th>
+                  <th>Amount (₹)</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-challans">
+                <tr><td colspan="8" style="text-align: center; color: var(--color-text-muted);">No challans recorded.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 7. Subtab Content: FASTag Information (Form / Card) -->
+        <div id="subtab-content-fastag" class="subtab-pane" style="display: none;">
+          <div class="card-form" style="max-width: 700px;">
+            <h3 style="margin-bottom: 0.5rem; color: var(--color-primary);">FASTag Account Information</h3>
+            <p style="font-size: 0.85rem; color: var(--color-text-muted); margin-bottom: 1.25rem;">
+              Notice: FASTag charges are toll operations, kept separate from Vehicle Taxes.
+            </p>
+            <form id="form-fastag" onsubmit="handleSaveFASTag(event)">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>FASTag / Barcode Number</label>
+                  <input type="text" id="fastag-number" class="form-control" placeholder="e.g. 34161FFA0192837">
+                </div>
+
+                <div class="form-group">
+                  <label>Tag Provider / Bank</label>
+                  <input type="text" id="fastag-provider" class="form-control" placeholder="e.g. ICICI Bank, SBI, IDFC">
+                </div>
+
+                <div class="form-group">
+                  <label>Tag Status</label>
+                  <select id="fastag-status" class="form-control">
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="LOW_BALANCE">LOW_BALANCE</option>
+                    <option value="SUSPENDED">SUSPENDED</option>
+                    <option value="INACTIVE">INACTIVE</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label>Linked Wallet / Account Ref</label>
+                  <input type="text" id="fastag-account-ref" class="form-control" placeholder="e.g. ACC-998811">
+                </div>
+
+                <div class="form-group">
+                  <label>Last Known Balance (₹)</label>
+                  <input type="number" step="0.01" id="fastag-balance" class="form-control" placeholder="2500">
+                </div>
+
+                <div class="form-group">
+                  <label>Notes</label>
+                  <input type="text" id="fastag-notes" class="form-control" placeholder="Commercial tag notes">
+                </div>
+              </div>
+
+              <div style="margin-top: 1.25rem;">
+                <button type="submit" id="btn-save-fastag" class="btn btn-accent">Save FASTag Details</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- 8. Subtab Content: Payment History (Table) -->
+        <div id="subtab-content-history" class="subtab-pane" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3 style="color: var(--color-primary);">Complete Tax Assessment & Payment History</h3>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Period</th>
+                  <th>Tax Type</th>
+                  <th>State</th>
+                  <th>Amount (₹)</th>
+                  <th>Paid Date</th>
+                  <th>Validity</th>
+                  <th>Status</th>
+                  <th>Challan / Ref</th>
+                  <th>Receipt</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-tax-history">
+                <tr><td colspan="9" style="text-align: center; color: var(--color-text-muted);">No historical records found.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -526,6 +929,30 @@
         <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
           <button type="button" class="btn btn-secondary" onclick="closeAssignDriverModal()">Cancel</button>
           <button type="submit" class="btn btn-accent">Assign Driver</button>
+        </div>
+      </form>
+    </div>
+  <!-- Upload Tax Receipt Modal -->
+  <div id="modal-upload-tax-receipt" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>🧾 Upload Tax Receipt / Challan</h3>
+        <button class="modal-close" onclick="closeTaxReceiptModal()">✕</button>
+      </div>
+      <form id="form-upload-tax-receipt" onsubmit="handleTaxReceiptUploadSubmit(event)">
+        <input type="hidden" id="receipt-tax-id">
+        <input type="hidden" id="receipt-vehicle-id">
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>Tax Details</label>
+          <input type="text" id="receipt-tax-details" class="form-control" readonly>
+        </div>
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label>Receipt File (PDF, JPG, PNG, Max 10MB) *</label>
+          <input type="file" id="receipt-tax-file" class="form-control" accept=".pdf,.jpg,.jpeg,.png" required>
+        </div>
+        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary" onclick="closeTaxReceiptModal()">Cancel</button>
+          <button type="submit" class="btn btn-accent">Upload Receipt</button>
         </div>
       </form>
     </div>

@@ -21,3 +21,7 @@ class Vehicle(Base):
     assignments = relationship("VehicleAssignment", back_populates="vehicle", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="vehicle", cascade="all, delete-orphan")
     tanker_reports = relationship("TankerDailyReport", back_populates="vehicle", cascade="all, delete-orphan")
+    tax_records = relationship("VehicleTaxRecord", back_populates="vehicle", cascade="all, delete-orphan")
+    government_charges = relationship("VehicleGovernmentCharge", back_populates="vehicle", cascade="all, delete-orphan")
+    challans = relationship("VehicleChallan", back_populates="vehicle", cascade="all, delete-orphan")
+    fastag = relationship("VehicleFASTag", back_populates="vehicle", uselist=False, cascade="all, delete-orphan")

@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: List[str] = [".pdf", ".jpg", ".jpeg", ".png"]
     ALLOWED_MIME_TYPES: List[str] = ["application/pdf", "image/jpeg", "image/png"]
 
+    # Tax & Compliance Configuration
+    TAX_WARNING_DAYS: int = 30
+    TAX_URGENT_DAYS: int = 7
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 settings = Settings()

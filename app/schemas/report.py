@@ -8,3 +8,7 @@ class DashboardMetricsResponse(BaseModel):
     documents_expiring_soon: int
     total_tanker_entries_this_month: int
     total_freight_this_month: float
+    active_taxes: int = 0
+    taxes_due_soon: int = 0
+    taxes_overdue: int = 0
+    taxes_expired: int = 0

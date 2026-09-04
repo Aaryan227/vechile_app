@@ -237,19 +237,117 @@ body {
   letter-spacing: 0.03em;
 }
 
-.badge-valid, .badge-active, .badge-success {
+.badge-valid, .badge-active, .badge-success, .badge-paid {
   background-color: var(--color-success-bg);
   color: var(--color-success);
 }
 
-.badge-expiring_soon, .badge-warning, .badge-pending {
+.badge-expiring_soon, .badge-due_soon, .badge-warning, .badge-pending {
   background-color: var(--color-warning-bg);
   color: var(--color-warning);
 }
 
-.badge-expired, .badge-error, .badge-inactive {
+.badge-expired, .badge-overdue, .badge-error, .badge-inactive, .badge-unpaid {
   background-color: var(--color-error-bg);
   color: var(--color-error);
+}
+
+.badge-disputed, .badge-suspended {
+  background-color: #f3e8ff;
+  color: #7e22ce;
+}
+
+/* Sub-tabs Component */
+.subtab-bar {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 2px solid var(--color-border);
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+}
+
+.subtab-btn {
+  padding: 0.65rem 1.25rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.subtab-btn:hover {
+  color: var(--color-primary);
+}
+
+.subtab-btn.active {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+}
+
+/* Tax Cards Component */
+.tax-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.tax-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tax-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.tax-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+}
+
+.tax-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.tax-card-amount {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 0.75rem;
+}
+
+.tax-card-meta {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin-bottom: 0.35rem;
+  display: flex;
+  justify-content: space-between;
+}
+
+.tax-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
 }
 
 .badge-uploaded, .badge-info {
