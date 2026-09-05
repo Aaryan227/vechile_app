@@ -3,7 +3,7 @@ from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    APP_NAME: str = "Vehicle & Logistics Management System"
+    APP_NAME: str = "VAHAANSETU"
     API_V1_STR: str = "/api/v1"
     
     # Security / Auth
