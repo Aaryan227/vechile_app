@@ -7,7 +7,7 @@ class UserBase(BaseModel):
     name: str
     email: EmailStr
     phone: Optional[str] = None
-    role: UserRole = UserRole.DRIVER
+    role: UserRole = UserRole.MASTER
     is_active: bool = True
 
 class UserUpdate(BaseModel):

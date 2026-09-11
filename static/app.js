@@ -63,33 +63,54 @@ function toggleAdminCodeInput() {
   if (!roleSelect) return;
 
   if (roleSelect.value === 'master') {
-    if (help) help.innerText = 'Requires MASTER_ACCESS_2026 for Master operations account';
-    if (input) input.placeholder = 'Enter MASTER_ACCESS_2026';
+    if (help) help.innerText = 'Code: MASTER_ACCESS_2026 for Master operations account';
+    if (input) {
+      input.placeholder = 'MASTER_ACCESS_2026';
+      if (input.value === 'ADMIN_ACCESS_2026') input.value = 'MASTER_ACCESS_2026';
+    }
   } else {
-    if (help) help.innerText = 'Requires ADMIN_ACCESS_2026 for Admin auditor/approver account';
-    if (input) input.placeholder = 'Enter ADMIN_ACCESS_2026';
+    if (help) help.innerText = 'Code: ADMIN_ACCESS_2026 for Admin auditor/approver account';
+    if (input) {
+      input.placeholder = 'ADMIN_ACCESS_2026';
+      if (input.value === 'MASTER_ACCESS_2026') input.value = 'ADMIN_ACCESS_2026';
+    }
   }
 }
 
 async function handleRegister(e) {
   e.preventDefault();
-  const name = document.getElementById('reg-name').value;
-  const email = document.getElementById('reg-email').value;
-  const phone = document.getElementById('reg-phone').value || null;
+  const name = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const rawPhone = document.getElementById('reg-phone').value.trim();
+  const phone = rawPhone.length > 0 ? rawPhone : null;
   const password = document.getElementById('reg-password').value;
   const role = document.getElementById('reg-role').value;
-  const access_code = document.getElementById('reg-admin-code').value;
+  const access_code = document.getElementById('reg-admin-code').value.trim();
 
   try {
     const res = await fetch(`${API_BASE}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, phone, password, role, access_code, admin_access_code: access_code })
+      body: JSON.stringify({
+        name,
+        email,
+        phone,
+        password,
+        role,
+        access_code,
+        admin_access_code: access_code
+      })
     });
 
     if (!res.ok) {
       const err = await res.json();
-      throw new Error(err.detail || 'Registration failed');
+      let msg = 'Registration failed';
+      if (typeof err.detail === 'string') {
+        msg = err.detail;
+      } else if (Array.isArray(err.detail)) {
+        msg = err.detail.map(d => d.msg || d.message || JSON.stringify(d)).join(', ');
+      }
+      throw new Error(msg);
     }
 
     showToast('Account registered successfully! Signing in...', 'success');

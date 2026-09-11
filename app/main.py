@@ -1,9 +1,12 @@
 import os
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+
+logger = logging.getLogger("uvicorn.error")
 
 from app.core.config import settings
 from app.db.session import engine, SessionLocal
@@ -113,9 +116,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Exception handler to prevent returning internal tracebacks to client
+# Exception handler to prevent returning internal tracebacks to client while preserving HTTP exceptions
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+            headers=getattr(exc, "headers", None)
+        )
+    logger.error(f"Unhandled error on {request.method} {request.url.path}: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
         content={"detail": "An internal server error occurred. Please contact system administrator."}
