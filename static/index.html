@@ -99,15 +99,15 @@
               <div class="form-group" style="margin-bottom: 1rem;">
                 <label>Register As *</label>
                 <select id="reg-role" class="form-control" onchange="toggleAdminCodeInput()" required>
-                  <option value="driver">Driver</option>
-                  <option value="admin">Admin</option>
+                  <option value="master">Master (Fleet Operations)</option>
+                  <option value="admin">Admin (Auditor & Approver)</option>
                 </select>
               </div>
 
-              <div id="reg-admin-code-group" class="form-group" style="margin-bottom: 1.5rem; display: none;">
-                <label style="color: var(--color-primary); font-weight: 600;">Admin Access Code *</label>
-                <input type="password" id="reg-admin-code" class="form-control" placeholder="Enter Admin Access Code">
-                <small style="color: var(--color-text-muted); font-size: 0.75rem;">Requires valid access key for admin privileges</small>
+              <div id="reg-admin-code-group" class="form-group" style="margin-bottom: 1.5rem;">
+                <label id="lbl-access-code" style="color: var(--color-primary); font-weight: 600;">Security Access Code *</label>
+                <input type="password" id="reg-admin-code" class="form-control" placeholder="Enter MASTER_ACCESS_2026 or ADMIN_ACCESS_2026" required>
+                <small id="txt-access-code-help" style="color: var(--color-text-muted); font-size: 0.75rem;">Requires MASTER_ACCESS_2026 for Master or ADMIN_ACCESS_2026 for Admin</small>
               </div>
 
               <button type="submit" class="btn btn-primary" style="width: 100%; margin-bottom: 1rem;">Create Account</button>
@@ -135,10 +135,10 @@
             <div class="metric-trend" style="color: var(--color-info);">Active Fleet</div>
           </div>
 
-          <div class="metric-card">
-            <div class="metric-label">Active Drivers</div>
-            <div class="metric-value" id="metric-total-drivers">0</div>
-            <div class="metric-trend" style="color: var(--color-success);">Assigned Personnel</div>
+          <div class="metric-card" style="cursor: pointer;" onclick="switchTab('documents')">
+            <div class="metric-label">Pending Re-upload Requests</div>
+            <div class="metric-value" id="metric-pending-reuploads" style="color: var(--color-warning);">0</div>
+            <div class="metric-trend" style="color: var(--color-warning);">Awaiting Admin Approval</div>
           </div>
 
           <div class="metric-card">
@@ -266,7 +266,6 @@
               <tr>
                 <th>Vehicle Number</th>
                 <th>Class</th>
-                <th>Assigned Driver</th>
                 <th>Make & Model</th>
                 <th>Chassis No</th>
                 <th>Status</th>
@@ -275,7 +274,7 @@
             </thead>
             <tbody id="tbody-vehicles">
               <tr>
-                <td colspan="7" style="text-align: center; color: var(--color-text-muted);">Loading vehicles...</td>
+                <td colspan="6" style="text-align: center; color: var(--color-text-muted);">Loading vehicles...</td>
               </tr>
             </tbody>
           </table>
@@ -291,8 +290,37 @@
           </div>
         </div>
 
-        <!-- Upload Form -->
-        <div class="card-form">
+        <!-- Admin Document Re-upload Approvals Panel -->
+        <div id="panel-admin-reupload-requests" class="card-form" style="display: none; border-left: 4px solid var(--color-warning); margin-bottom: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+            <h3 style="color: var(--color-warning); margin: 0;">⏳ Pending Re-upload Requests (Admin Approval Authority)</h3>
+            <span id="badge-reupload-count" class="badge badge-warning">0 Pending</span>
+          </div>
+          <p style="color: var(--color-text-muted); font-size: 0.85rem; margin-bottom: 1rem;">
+            Master accounts have requested permission to replace or update the following documents. Review and approve or reject.
+          </p>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Vehicle No.</th>
+                  <th>Document Type</th>
+                  <th>Document Number</th>
+                  <th>Expiry Date</th>
+                  <th>Master's Reason</th>
+                  <th>Current File</th>
+                  <th>Decision</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-reupload-requests">
+                <tr><td colspan="7" style="text-align: center; color: var(--color-text-muted);">No pending re-upload requests</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Upload Form (Master Only) -->
+        <div id="card-upload-doc" class="card-form">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
             <h3 style="color: var(--color-primary);">Upload Vehicle Document</h3>
             <span style="font-size: 0.8rem; color: var(--color-info); font-weight: 500;">🔒 Each document type can be uploaded once (Admin permission required to re-upload)</span>
@@ -377,7 +405,7 @@
         </div>
 
         <!-- Tanker Daily Entry Form -->
-        <div class="card-form">
+        <div id="card-tanker-form" class="card-form">
           <h3 style="margin-bottom: 1rem; color: var(--color-primary);">New Tanker Daily Entry</h3>
           <form id="form-tanker-report" onsubmit="handleCreateTankerReport(event)">
             <div class="form-grid">
@@ -738,6 +766,7 @@
         <div id="subtab-content-taxes" class="subtab-pane">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
             <h3 style="color: var(--color-primary);">Current Applicable Taxes</h3>
+            <button id="btn-add-tax-toggle" class="btn btn-secondary btn-sm" onclick="toggleAddTaxForm()">+ Record Tax</button>
           </div>
           <div id="tax-cards-container" class="tax-cards-grid">
             <div style="color: var(--color-text-muted); padding: 1.5rem;">Select a vehicle to view taxes.</div>
@@ -907,28 +936,27 @@
     </div>
   </div>
 
-  <!-- Assign Driver Modal (Admin Only) -->
-  <div id="modal-assign-driver" class="modal-overlay">
+  <!-- Request Document Re-upload Modal (Master) -->
+  <div id="modal-request-reupload" class="modal-overlay">
     <div class="modal-card">
       <div class="modal-header">
-        <h3>🚛 Assign Driver to Vehicle</h3>
-        <button class="modal-close" onclick="closeAssignDriverModal()">✕</button>
+        <h3>📋 Request Document Re-upload</h3>
+        <button class="modal-close" onclick="closeRequestReuploadModal()">✕</button>
       </div>
-      <form id="form-assign-driver" onsubmit="handleAssignDriver(event)">
-        <input type="hidden" id="assign-vehicle-id">
-        <div class="form-group" style="margin-bottom: 1.25rem;">
-          <label>Vehicle Number</label>
-          <input type="text" id="assign-vehicle-number" class="form-control" readonly>
+      <form id="form-request-reupload" onsubmit="handleRequestReuploadSubmit(event)">
+        <input type="hidden" id="req-reupload-doc-id">
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label>Document Info</label>
+          <input type="text" id="req-reupload-doc-info" class="form-control" readonly>
         </div>
-        <div class="form-group" style="margin-bottom: 1.5rem;">
-          <label>Select Driver *</label>
-          <select id="assign-driver-id" class="form-control" required>
-            <option value="">-- Choose Active Driver --</option>
-          </select>
+        <div class="form-group" style="margin-bottom: 1.25rem;">
+          <label>Reason for Re-upload Request *</label>
+          <textarea id="req-reupload-reason" class="form-control" rows="3" placeholder="Explain why this document needs replacement or update (e.g. Policy renewed, corrected registration number)" required></textarea>
+          <small style="color: var(--color-text-muted); font-size: 0.8rem;">This will be submitted to the Admin for approval.</small>
         </div>
         <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
-          <button type="button" class="btn btn-secondary" onclick="closeAssignDriverModal()">Cancel</button>
-          <button type="submit" class="btn btn-accent">Assign Driver</button>
+          <button type="button" class="btn btn-secondary" onclick="closeRequestReuploadModal()">Cancel</button>
+          <button type="submit" class="btn btn-accent">Submit Request</button>
         </div>
       </form>
     </div>

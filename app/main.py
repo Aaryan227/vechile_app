@@ -26,13 +26,40 @@ from app.core.security import get_password_hash
 def seed_initial_data():
     db = SessionLocal()
     try:
-        # Check if admin user exists
-        admin = db.query(User).filter(User.email == "admin@kingspetroleum.com").first()
+        # Migrate existing admin to MASTER so previous credentials maintain full operational access
+        old_admin = db.query(User).filter(User.email == "admin@kingspetroleum.com").first()
+        if old_admin and old_admin.role != UserRole.MASTER:
+            old_admin.role = UserRole.MASTER
+            db.commit()
+
+        # Ensure Master user exists
+        master = db.query(User).filter(User.email == "master@vahaansetu.com").first()
+        if not master:
+            phone = "9800000001"
+            if db.query(User).filter(User.phone == phone).first():
+                phone = None
+            master = User(
+                name="Fleet Master",
+                email="master@vahaansetu.com",
+                phone=phone,
+                password_hash=get_password_hash("Master@123456"),
+                role=UserRole.MASTER,
+                is_active=True
+            )
+            db.add(master)
+            db.commit()
+            db.refresh(master)
+
+        # Ensure Admin user exists (Auditor / Re-upload Approver)
+        admin = db.query(User).filter(User.email == "admin@vahaansetu.com").first()
         if not admin:
+            phone = "9800000002"
+            if db.query(User).filter(User.phone == phone).first():
+                phone = None
             admin = User(
-                name="System Admin",
-                email="admin@kingspetroleum.com",
-                phone="9876543210",
+                name="Compliance Admin",
+                email="admin@vahaansetu.com",
+                phone=phone,
                 password_hash=get_password_hash("Admin@123456"),
                 role=UserRole.ADMIN,
                 is_active=True
@@ -40,21 +67,6 @@ def seed_initial_data():
             db.add(admin)
             db.commit()
             db.refresh(admin)
-
-        # Check if default driver exists
-        driver = db.query(User).filter(User.email == "driver@kingspetroleum.com").first()
-        if not driver:
-            driver = User(
-                name="Rahul Kumar",
-                email="driver@kingspetroleum.com",
-                phone="9123456789",
-                password_hash=get_password_hash("Driver@123456"),
-                role=UserRole.DRIVER,
-                is_active=True
-            )
-            db.add(driver)
-            db.commit()
-            db.refresh(driver)
 
         # Check if sample vehicle exists
         vehicle = db.query(Vehicle).filter(Vehicle.vehicle_number == "MH12AB1234").first()
@@ -72,15 +84,8 @@ def seed_initial_data():
             db.add(vehicle)
             db.commit()
             db.refresh(vehicle)
-
-            # Assign driver to vehicle
-            assignment = VehicleAssignment(
-                vehicle_id=vehicle.id,
-                driver_id=driver.id,
-                is_active=True
-            )
-            db.add(assignment)
-            db.commit()
+    except Exception as e:
+        db.rollback()
     finally:
         db.close()
 

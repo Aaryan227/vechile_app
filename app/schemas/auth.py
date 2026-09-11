@@ -20,7 +20,8 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     phone: Optional[str] = Field(None, max_length=20)
     password: str = Field(..., min_length=6)
-    role: UserRole = UserRole.DRIVER
+    role: UserRole = UserRole.MASTER
+    access_code: Optional[str] = None
     admin_access_code: Optional[str] = None
 
 class AdminUserCreate(BaseModel):
@@ -28,7 +29,7 @@ class AdminUserCreate(BaseModel):
     email: EmailStr
     phone: Optional[str] = Field(None, max_length=20)
     password: str = Field(..., min_length=6)
-    role: UserRole = UserRole.DRIVER
+    role: UserRole = UserRole.MASTER
 
 class PasswordChange(BaseModel):
     old_password: str

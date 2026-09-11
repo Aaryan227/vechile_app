@@ -2,21 +2,15 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.db.models.user import User, UserRole
-from app.core.dependencies import get_current_user, get_current_admin
-from app.schemas.vehicle import VehicleCreate, VehicleUpdate, VehicleResponse, VehicleAssignRequest
-from app.schemas.user import UserResponse
+from app.db.models.user import User
+from app.core.dependencies import get_current_master, get_current_master_or_admin
+from app.schemas.vehicle import VehicleCreate, VehicleUpdate, VehicleResponse
 from app.services import vehicle_service
-from app.core.exceptions import PermissionDeniedException
 
 router = APIRouter(prefix="/vehicles", tags=["Vehicles Management"])
 
-def populate_vehicle_response(db: Session, vehicle) -> VehicleResponse:
-    res = VehicleResponse.model_validate(vehicle)
-    active_driver = vehicle_service.get_active_driver_for_vehicle(db, vehicle.id)
-    if active_driver:
-        res.active_driver = UserResponse.model_validate(active_driver)
-    return res
+def populate_vehicle_response(vehicle) -> VehicleResponse:
+    return VehicleResponse.model_validate(vehicle)
 
 @router.get("", response_model=List[VehicleResponse])
 def list_vehicles(
@@ -24,64 +18,48 @@ def list_vehicles(
     limit: int = 100,
     status: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_master_or_admin)
 ):
-    if current_user.role == UserRole.ADMIN:
-        vehicles = vehicle_service.get_vehicles(db, skip=skip, limit=limit, status=status)
-    else:
-        vehicles = vehicle_service.get_driver_assigned_vehicles(db, current_user.id)
-        
-    return [populate_vehicle_response(db, v) for v in vehicles]
+    """List all vehicles (accessible to Master operations and Admin monitors)."""
+    vehicles = vehicle_service.get_vehicles(db, skip=skip, limit=limit, status=status)
+    return [populate_vehicle_response(v) for v in vehicles]
 
 @router.post("", response_model=VehicleResponse, status_code=status.HTTP_201_CREATED)
 def create_vehicle(
     data: VehicleCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    master: User = Depends(get_current_master)
 ):
-    vehicle = vehicle_service.create_vehicle(db, data, admin.id)
-    return populate_vehicle_response(db, vehicle)
+    """Master endpoint to register a new vehicle."""
+    vehicle = vehicle_service.create_vehicle(db, data, master.id)
+    return populate_vehicle_response(vehicle)
 
 @router.get("/{vehicle_id}", response_model=VehicleResponse)
 def get_vehicle(
     vehicle_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_master_or_admin)
 ):
+    """Get vehicle details (accessible to Master operations and Admin monitors)."""
     vehicle = vehicle_service.get_vehicle_by_id(db, vehicle_id)
-    
-    # Permission check for driver
-    if current_user.role == UserRole.DRIVER:
-        assigned = vehicle_service.get_driver_assigned_vehicles(db, current_user.id)
-        if vehicle.id not in [v.id for v in assigned]:
-            raise PermissionDeniedException("Access denied: You are not assigned to this vehicle")
-            
-    return populate_vehicle_response(db, vehicle)
+    return populate_vehicle_response(vehicle)
 
 @router.patch("/{vehicle_id}", response_model=VehicleResponse)
 def update_vehicle(
     vehicle_id: int,
     data: VehicleUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    master: User = Depends(get_current_master)
 ):
-    vehicle = vehicle_service.update_vehicle(db, vehicle_id, data, admin.id)
-    return populate_vehicle_response(db, vehicle)
+    """Master endpoint to update vehicle details."""
+    vehicle = vehicle_service.update_vehicle(db, vehicle_id, data, master.id)
+    return populate_vehicle_response(vehicle)
 
 @router.delete("/{vehicle_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_vehicle(
     vehicle_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    master: User = Depends(get_current_master)
 ):
-    vehicle_service.delete_vehicle(db, vehicle_id, admin.id)
-
-@router.post("/{vehicle_id}/assign", status_code=status.HTTP_200_OK)
-def assign_driver_to_vehicle(
-    vehicle_id: int,
-    data: VehicleAssignRequest,
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
-):
-    assignment = vehicle_service.assign_driver(db, vehicle_id, data.driver_id, admin.id)
-    return {"message": "Driver assigned successfully", "assignment_id": assignment.id}
+    """Master endpoint to delete a vehicle."""
+    vehicle_service.delete_vehicle(db, vehicle_id, master.id)

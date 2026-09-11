@@ -11,7 +11,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    ADMIN_ACCESS_CODE: str = "ADMIN_SECRET_2026"
+    MASTER_ACCESS_CODE: str = "MASTER_ACCESS_2026"
+    ADMIN_ACCESS_CODE: str = "ADMIN_ACCESS_2026"
     
     # Database
     DATABASE_URL: str = "sqlite:///./vehicle_logistics.db"

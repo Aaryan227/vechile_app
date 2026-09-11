@@ -30,6 +30,7 @@ class DocumentResponse(DocumentBase):
     can_reupload: bool = False
     reupload_requested: bool = False
     reupload_reason: Optional[str] = None
+    vehicle_number: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

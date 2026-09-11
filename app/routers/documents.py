@@ -1,21 +1,32 @@
 import os
 from datetime import date
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Form, File, UploadFile, status
+from fastapi import APIRouter, Depends, Form, File, UploadFile, status, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from app.schemas.document import ReuploadRequestCreate
+from app.schemas.document import ReuploadRequestCreate, DocumentResponse
 from app.db.session import get_db
-from app.db.models.user import User, UserRole
-from app.db.models.document import DocumentType
-from app.core.dependencies import get_current_user, get_current_admin
-from app.schemas.document import DocumentResponse
+from app.db.models.user import User
+from app.db.models.document import Document, DocumentType
+from app.db.models.vehicle import Vehicle
+from app.core.dependencies import get_current_master, get_current_admin, get_current_master_or_admin
 from app.services import document_service, vehicle_service
 from app.utils.file_validation import validate_and_save_upload_file
 from app.core.config import settings
-from app.core.exceptions import PermissionDeniedException, NotFoundException
+from app.core.security import decode_token
+from app.core.exceptions import PermissionDeniedException, NotFoundException, CredentialsException
 
 router = APIRouter(prefix="/documents", tags=["Vehicle Documents"])
+
+def populate_doc_response(db: Session, doc: Document) -> DocumentResponse:
+    res = DocumentResponse.model_validate(doc)
+    if doc.vehicle:
+        res.vehicle_number = doc.vehicle.vehicle_number
+    else:
+        v = db.query(Vehicle).filter(Vehicle.id == doc.vehicle_id).first()
+        if v:
+            res.vehicle_number = v.vehicle_number
+    return res
 
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 def upload_document(
@@ -26,16 +37,10 @@ def upload_document(
     issue_date: Optional[date] = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    master: User = Depends(get_current_master)
 ):
-    # Authorization check: verify vehicle exists and driver is assigned to it if driver
-    vehicle = vehicle_service.get_vehicle_by_id(db, vehicle_id)
-    is_driver = (current_user.role == UserRole.DRIVER)
-    if is_driver:
-        assigned = vehicle_service.get_driver_assigned_vehicles(db, current_user.id)
-        if vehicle.id not in [v.id for v in assigned]:
-            raise PermissionDeniedException("You are not assigned to this vehicle")
-            
+    """Master endpoint to upload initial vehicle documents or re-upload if approved by Admin."""
+    vehicle_service.get_vehicle_by_id(db, vehicle_id)
     filename, file_url, mime_type, file_size = validate_and_save_upload_file(file, vehicle_id)
     
     doc = document_service.create_document(
@@ -49,10 +54,10 @@ def upload_document(
         file_url=file_url,
         mime_type=mime_type,
         file_size=file_size,
-        user_id=current_user.id,
-        is_driver=is_driver
+        user_id=master.id,
+        is_driver=False
     )
-    return doc
+    return populate_doc_response(db, doc)
 
 
 @router.post("/{document_id}/request-reupload", response_model=DocumentResponse)
@@ -60,18 +65,12 @@ def request_reupload(
     document_id: int,
     payload: Optional[ReuploadRequestCreate] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    master: User = Depends(get_current_master)
 ):
-    """Driver endpoint to request reupload permission from Admin."""
-    doc = document_service.get_document_by_id(db, document_id)
-    
-    # Check assignment if driver
-    if current_user.role == UserRole.DRIVER:
-        assigned = vehicle_service.get_driver_assigned_vehicles(db, current_user.id)
-        if doc.vehicle_id not in [v.id for v in assigned]:
-            raise PermissionDeniedException("You are not assigned to this vehicle")
+    """Master endpoint to request reupload permission from Admin with a reason."""
     reason = payload.reason if payload else None
-    return document_service.request_reupload_permission(db, document_id, current_user.id, reason)
+    doc = document_service.request_reupload_permission(db, document_id, master.id, reason)
+    return populate_doc_response(db, doc)
 
 
 @router.post("/{document_id}/allow-reupload", response_model=DocumentResponse)
@@ -80,61 +79,74 @@ def allow_reupload(
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin)
 ):
-    """Admin endpoint to grant permission to driver to re-upload or update a document."""
-    return document_service.grant_reupload_permission(db, document_id, admin.id)
+    """Admin endpoint to approve Master's document re-upload request."""
+    doc = document_service.grant_reupload_permission(db, document_id, admin.id)
+    return populate_doc_response(db, doc)
 
 
+@router.post("/{document_id}/reject-reupload", response_model=DocumentResponse)
+def reject_reupload(
+    document_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """Admin endpoint to reject Master's document re-upload request."""
+    doc = document_service.reject_reupload_permission(db, document_id, admin.id)
+    return populate_doc_response(db, doc)
+
+
+@router.get("/reupload-requests", response_model=List[DocumentResponse])
+def get_reupload_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_master_or_admin)
+):
+    """List all documents with pending reupload requests awaiting Admin approval."""
+    docs = document_service.get_pending_reupload_requests(db)
+    return [populate_doc_response(db, d) for d in docs]
 
 
 @router.get("/vehicle/{vehicle_id}", response_model=List[DocumentResponse])
 def get_documents_by_vehicle(
     vehicle_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_master_or_admin)
 ):
-    vehicle = vehicle_service.get_vehicle_by_id(db, vehicle_id)
-    if current_user.role == UserRole.DRIVER:
-        assigned = vehicle_service.get_driver_assigned_vehicles(db, current_user.id)
-        if vehicle.id not in [v.id for v in assigned]:
-            raise PermissionDeniedException("Access denied: You are not assigned to this vehicle")
-            
-    return document_service.get_documents_for_vehicle(db, vehicle_id)
-
+    """Get all documents for a vehicle (accessible to Master and Admin monitors)."""
+    vehicle_service.get_vehicle_by_id(db, vehicle_id)
+    docs = document_service.get_documents_for_vehicle(db, vehicle_id)
+    return [populate_doc_response(db, d) for d in docs]
 
 
 @router.get("/expired", response_model=List[DocumentResponse])
 def get_expired_documents(
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    current_user: User = Depends(get_current_master_or_admin)
 ):
-    return document_service.get_expired_documents(db)
+    """Get all expired documents across fleet (Master and Admin monitors)."""
+    docs = document_service.get_expired_documents(db)
+    return [populate_doc_response(db, d) for d in docs]
+
 
 @router.get("/expiring-soon", response_model=List[DocumentResponse])
 def get_expiring_soon_documents(
     days: int = 30,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    current_user: User = Depends(get_current_master_or_admin)
 ):
-    return document_service.get_expiring_soon_documents(db, days)
+    """Get documents expiring within specified days (Master and Admin monitors)."""
+    docs = document_service.get_expiring_soon_documents(db, days)
+    return [populate_doc_response(db, d) for d in docs]
+
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_document(
     document_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    master: User = Depends(get_current_master)
 ):
-    is_driver = (current_user.role == UserRole.DRIVER)
-    doc = document_service.get_document_by_id(db, document_id)
-    if is_driver and doc.uploaded_by != current_user.id:
-        raise PermissionDeniedException("Insufficient permission to delete this document")
-        
-    document_service.delete_document(db, document_id, current_user.id, is_driver=is_driver)
+    """Master endpoint to delete a document."""
+    document_service.delete_document(db, document_id, master.id)
 
-
-
-from fastapi import Query
-from app.core.security import decode_token
-from app.db.models.document import Document
 
 @router.get("/file/{filename}")
 def serve_document_file(
@@ -142,6 +154,7 @@ def serve_document_file(
     token: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
+    """Serve secure document file for authenticated users."""
     if not token:
         raise CredentialsException("Authentication token required to view document")
     try:
@@ -166,12 +179,3 @@ def serve_document_file(
         media_type=media_type,
         headers={"Content-Disposition": f"inline; filename=\"{safe_filename}\""}
     )
-
-
-@router.get("/reupload-requests", response_model=List[DocumentResponse])
-def get_reupload_requests(
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
-):
-    """Admin endpoint to list all documents with pending reupload requests."""
-    return document_service.get_pending_reupload_requests(db)

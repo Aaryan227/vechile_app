@@ -15,7 +15,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
-    """Public registration for DRIVER or ADMIN accounts (requires admin_access_code for ADMIN)."""
+    """Public registration for MASTER or ADMIN accounts (requires MASTER_ACCESS_2026 or ADMIN_ACCESS_2026)."""
     return auth_service.register_user(db, data)
 
 @router.post(

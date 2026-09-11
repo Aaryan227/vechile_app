@@ -5,9 +5,9 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.db.models.user import User, UserRole
-from app.core.dependencies import get_current_user, get_current_admin
-from app.core.exceptions import PermissionDeniedException, NotFoundException, CredentialsException
+from app.db.models.user import User
+from app.core.dependencies import get_current_master, get_current_master_or_admin
+from app.core.exceptions import NotFoundException, CredentialsException
 from app.core.config import settings
 from app.core.security import decode_token
 from app.utils.file_validation import validate_and_save_upload_file
@@ -30,13 +30,8 @@ router = APIRouter(tags=["Vehicle Taxes & Government Charges"])
 
 
 def verify_vehicle_access(db: Session, vehicle_id: int, current_user: User):
-    """Verifies that the vehicle exists and that the user is authorized (Admin or assigned Driver)."""
-    vehicle = vehicle_service.get_vehicle_by_id(db, vehicle_id)
-    if current_user.role == UserRole.DRIVER:
-        assigned_vehicles = vehicle_service.get_driver_assigned_vehicles(db, current_user.id)
-        if vehicle.id not in [v.id for v in assigned_vehicles]:
-            raise PermissionDeniedException("Access denied: You are not assigned to this vehicle")
-    return vehicle
+    """Verifies that the vehicle exists."""
+    return vehicle_service.get_vehicle_by_id(db, vehicle_id)
 
 
 # ==========================================
@@ -48,17 +43,17 @@ def create_vehicle_tax(
     vehicle_id: int,
     data: TaxRecordCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    master: User = Depends(get_current_master)
 ):
-    verify_vehicle_access(db, vehicle_id, admin)
-    return tax_service.create_tax_record(db, vehicle_id, data, admin.id)
+    verify_vehicle_access(db, vehicle_id, master)
+    return tax_service.create_tax_record(db, vehicle_id, data, master.id)
 
 
 @router.get("/vehicles/{vehicle_id}/taxes", response_model=List[TaxRecordResponse])
 def get_vehicle_taxes(
     vehicle_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_master_or_admin)
 ):
     verify_vehicle_access(db, vehicle_id, current_user)
     return tax_service.get_taxes_for_vehicle(db, vehicle_id)
@@ -69,7 +64,7 @@ def get_vehicle_tax(
     vehicle_id: int,
     tax_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_master_or_admin)
 ):
     verify_vehicle_access(db, vehicle_id, current_user)
     tax = tax_service.get_tax_by_id(db, tax_id)
@@ -84,13 +79,13 @@ def update_vehicle_tax(
     tax_id: int,
     data: TaxRecordUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    master: User = Depends(get_current_master)
 ):
-    verify_vehicle_access(db, vehicle_id, admin)
+    verify_vehicle_access(db, vehicle_id, master)
     tax = tax_service.get_tax_by_id(db, tax_id)
     if tax.vehicle_id != vehicle_id:
         raise NotFoundException("Tax record not found for this vehicle")
-    return tax_service.update_tax_record(db, tax_id, data, admin.id)
+    return tax_service.update_tax_record(db, tax_id, data, master.id)
 
 
 @router.delete("/vehicles/{vehicle_id}/taxes/{tax_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -98,13 +93,13 @@ def delete_vehicle_tax(
     vehicle_id: int,
     tax_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    master: User = Depends(get_current_master)
 ):
-    verify_vehicle_access(db, vehicle_id, admin)
+    verify_vehicle_access(db, vehicle_id, master)
     tax = tax_service.get_tax_by_id(db, tax_id)
     if tax.vehicle_id != vehicle_id:
         raise NotFoundException("Tax record not found for this vehicle")
-    tax_service.delete_tax_record(db, tax_id, admin.id)
+    tax_service.delete_tax_record(db, tax_id, master.id)
 
 
 @router.post("/vehicles/{vehicle_id}/taxes/{tax_id}/receipt", response_model=TaxRecordResponse)
@@ -113,15 +108,15 @@ def upload_tax_receipt(
     tax_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    master: User = Depends(get_current_master)
 ):
-    verify_vehicle_access(db, vehicle_id, current_user)
+    verify_vehicle_access(db, vehicle_id, master)
     tax = tax_service.get_tax_by_id(db, tax_id)
     if tax.vehicle_id != vehicle_id:
         raise NotFoundException("Tax record not found for this vehicle")
 
     filename, file_url, mime_type, file_size = validate_and_save_upload_file(file, vehicle_id)
-    return tax_service.attach_tax_receipt(db, tax_id, file_url, current_user.id)
+    return tax_service.attach_tax_receipt(db, tax_id, file_url, master.id)
 
 
 # ==========================================
@@ -133,17 +128,17 @@ def create_government_charge(
     vehicle_id: int,
     data: GovernmentChargeCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    master: User = Depends(get_current_master)
 ):
-    verify_vehicle_access(db, vehicle_id, admin)
-    return tax_service.create_government_charge(db, vehicle_id, data, admin.id)
+    verify_vehicle_access(db, vehicle_id, master)
+    return tax_service.create_government_charge(db, vehicle_id, data, master.id)
 
 
 @router.get("/vehicles/{vehicle_id}/government-charges", response_model=List[GovernmentChargeResponse])
 def get_government_charges(
     vehicle_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_master_or_admin)
 ):
     verify_vehicle_access(db, vehicle_id, current_user)
     return tax_service.get_government_charges_for_vehicle(db, vehicle_id)
@@ -154,7 +149,7 @@ def get_government_charge(
     vehicle_id: int,
     charge_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_master_or_admin)
 ):
     verify_vehicle_access(db, vehicle_id, current_user)
     charge = tax_service.get_government_charge_by_id(db, charge_id)
@@ -169,13 +164,13 @@ def update_government_charge(
     charge_id: int,
     data: GovernmentChargeUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    master: User = Depends(get_current_master)
 ):
-    verify_vehicle_access(db, vehicle_id, admin)
+    verify_vehicle_access(db, vehicle_id, master)
     charge = tax_service.get_government_charge_by_id(db, charge_id)
     if charge.vehicle_id != vehicle_id:
         raise NotFoundException("Government charge not found for this vehicle")
-    return tax_service.update_government_charge(db, charge_id, data, admin.id)
+    return tax_service.update_government_charge(db, charge_id, data, master.id)
 
 
 @router.delete("/vehicles/{vehicle_id}/government-charges/{charge_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -183,13 +178,13 @@ def delete_government_charge(
     vehicle_id: int,
     charge_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    master: User = Depends(get_current_master)
 ):
-    verify_vehicle_access(db, vehicle_id, admin)
+    verify_vehicle_access(db, vehicle_id, master)
     charge = tax_service.get_government_charge_by_id(db, charge_id)
     if charge.vehicle_id != vehicle_id:
         raise NotFoundException("Government charge not found for this vehicle")
-    tax_service.delete_government_charge(db, charge_id, admin.id)
+    tax_service.delete_government_charge(db, charge_id, master.id)
 
 
 # ==========================================
@@ -201,17 +196,17 @@ def create_challan(
     vehicle_id: int,
     data: ChallanCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    master: User = Depends(get_current_master)
 ):
-    verify_vehicle_access(db, vehicle_id, admin)
-    return tax_service.create_challan(db, vehicle_id, data, admin.id)
+    verify_vehicle_access(db, vehicle_id, master)
+    return tax_service.create_challan(db, vehicle_id, data, master.id)
 
 
 @router.get("/vehicles/{vehicle_id}/challans", response_model=List[ChallanResponse])
 def get_challans(
     vehicle_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_master_or_admin)
 ):
     verify_vehicle_access(db, vehicle_id, current_user)
     return tax_service.get_challans_for_vehicle(db, vehicle_id)
@@ -222,7 +217,7 @@ def get_challan(
     vehicle_id: int,
     challan_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_master_or_admin)
 ):
     verify_vehicle_access(db, vehicle_id, current_user)
     challan = tax_service.get_challan_by_id(db, challan_id)
@@ -237,13 +232,13 @@ def update_challan(
     challan_id: int,
     data: ChallanUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    master: User = Depends(get_current_master)
 ):
-    verify_vehicle_access(db, vehicle_id, admin)
+    verify_vehicle_access(db, vehicle_id, master)
     challan = tax_service.get_challan_by_id(db, challan_id)
     if challan.vehicle_id != vehicle_id:
         raise NotFoundException("Challan record not found for this vehicle")
-    return tax_service.update_challan(db, challan_id, data, admin.id)
+    return tax_service.update_challan(db, challan_id, data, master.id)
 
 
 @router.delete("/vehicles/{vehicle_id}/challans/{challan_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -251,13 +246,13 @@ def delete_challan(
     vehicle_id: int,
     challan_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    master: User = Depends(get_current_master)
 ):
-    verify_vehicle_access(db, vehicle_id, admin)
+    verify_vehicle_access(db, vehicle_id, master)
     challan = tax_service.get_challan_by_id(db, challan_id)
     if challan.vehicle_id != vehicle_id:
         raise NotFoundException("Challan record not found for this vehicle")
-    tax_service.delete_challan(db, challan_id, admin.id)
+    tax_service.delete_challan(db, challan_id, master.id)
 
 
 # ==========================================
@@ -268,7 +263,7 @@ def delete_challan(
 def get_fastag_info(
     vehicle_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_master_or_admin)
 ):
     verify_vehicle_access(db, vehicle_id, current_user)
     return tax_service.get_or_create_fastag(db, vehicle_id)
@@ -279,9 +274,9 @@ def update_fastag_info(
     vehicle_id: int,
     data: FASTagUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    master: User = Depends(get_current_master)
 ):
-    verify_vehicle_access(db, vehicle_id, admin)
+    verify_vehicle_access(db, vehicle_id, master)
     return tax_service.update_fastag(db, vehicle_id, data)
 
 

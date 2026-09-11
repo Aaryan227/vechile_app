@@ -51,6 +51,26 @@ def client(db):
     app.dependency_overrides.clear()
 
 @pytest.fixture
+def test_master(db):
+    master = User(
+        name="Test Master",
+        email="testmaster@kingspetroleum.com",
+        phone="9998887779",
+        password_hash=get_password_hash("MasterPass123"),
+        role=UserRole.MASTER,
+        is_active=True
+    )
+    db.add(master)
+    db.commit()
+    db.refresh(master)
+    return master
+
+@pytest.fixture
+def master_headers(test_master):
+    token = create_access_token(subject=test_master.id, role=test_master.role.value)
+    return {"Authorization": f"Bearer {token}"}
+
+@pytest.fixture
 def test_admin(db):
     admin = User(
         name="Test Admin",

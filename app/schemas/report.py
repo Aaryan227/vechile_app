@@ -3,7 +3,8 @@ from pydantic import BaseModel
 class DashboardMetricsResponse(BaseModel):
     total_vehicles: int
     active_vehicles: int
-    total_drivers: int
+    total_drivers: int = 0
+    pending_reupload_requests: int = 0
     expired_documents: int
     documents_expiring_soon: int
     total_tanker_entries_this_month: int

@@ -33,6 +33,13 @@ def get_current_user(
     
     return user
 
+def get_current_master(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    if current_user.role != UserRole.MASTER:
+        raise PermissionDeniedException("Master role required for this action")
+    return current_user
+
 def get_current_admin(
     current_user: User = Depends(get_current_user)
 ) -> User:
@@ -40,10 +47,9 @@ def get_current_admin(
         raise PermissionDeniedException("Admin role required for this action")
     return current_user
 
-def get_current_driver(
+def get_current_master_or_admin(
     current_user: User = Depends(get_current_user)
 ) -> User:
-    # Allows drivers (and admins testing driver endpoints)
-    if current_user.role not in [UserRole.DRIVER, UserRole.ADMIN]:
-        raise PermissionDeniedException("Driver role required for this action")
+    if current_user.role not in [UserRole.MASTER, UserRole.ADMIN]:
+        raise PermissionDeniedException("Master or Admin role required for this action")
     return current_user

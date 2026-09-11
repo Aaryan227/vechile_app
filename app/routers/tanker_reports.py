@@ -5,11 +5,10 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.db.models.user import User, UserRole
-from app.core.dependencies import get_current_user
+from app.db.models.user import User
+from app.core.dependencies import get_current_master, get_current_master_or_admin
 from app.schemas.tanker_report import TankerReportCreate, TankerReportUpdate, TankerReportResponse
 from app.services import tanker_report_service, export_service, vehicle_service
-from app.core.exceptions import PermissionDeniedException, NotFoundException
 
 router = APIRouter(prefix="/tanker-reports", tags=["Tanker Daily Reports"])
 
@@ -25,17 +24,11 @@ def populate_tanker_response(db: Session, report) -> TankerReportResponse:
 def create_tanker_report(
     data: TankerReportCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    master: User = Depends(get_current_master)
 ):
-    # Driver permission check
-    if current_user.role == UserRole.DRIVER:
-        assigned = vehicle_service.get_driver_assigned_vehicles(db, current_user.id)
-        if data.vehicle_id not in [v.id for v in assigned]:
-            raise PermissionDeniedException("You can only submit reports for assigned vehicles")
-        if data.driver_id is None:
-            data.driver_id = current_user.id
-            
-    report = tanker_report_service.create_tanker_report(db, data, current_user.id)
+    """Master endpoint to log a new tanker daily report."""
+    vehicle_service.get_vehicle_by_id(db, data.vehicle_id)
+    report = tanker_report_service.create_tanker_report(db, data, master.id)
     return populate_tanker_response(db, report)
 
 @router.get("/export")
@@ -45,8 +38,9 @@ def export_tanker_reports(
     vehicle_id: Optional[int] = None,
     ul_point: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_master_or_admin)
 ):
+    """Export tanker daily reports to Excel (Master and Admin monitors)."""
     reports = tanker_report_service.get_tanker_reports(
         db, skip=0, limit=10000, month=month, year=year, vehicle_id=vehicle_id, ul_point=ul_point
     )
@@ -66,19 +60,16 @@ def list_tanker_reports(
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None, ge=2000, le=2100),
     vehicle_id: Optional[int] = None,
-    driver_id: Optional[int] = None,
     ul_point: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_master_or_admin)
 ):
-    if current_user.role == UserRole.DRIVER:
-        driver_id = current_user.id
-        
+    """List tanker daily reports (Master operations and Admin monitors)."""
     reports = tanker_report_service.get_tanker_reports(
         db, skip=skip, limit=limit, month=month, year=year,
-        vehicle_id=vehicle_id, driver_id=driver_id, ul_point=ul_point,
+        vehicle_id=vehicle_id, ul_point=ul_point,
         date_from=date_from, date_to=date_to
     )
     return [populate_tanker_response(db, r) for r in reports]
@@ -87,11 +78,10 @@ def list_tanker_reports(
 def get_tanker_report(
     report_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_master_or_admin)
 ):
+    """Get single tanker report (Master and Admin monitors)."""
     report = tanker_report_service.get_tanker_report_by_id(db, report_id)
-    if current_user.role == UserRole.DRIVER and report.driver_id != current_user.id:
-        raise PermissionDeniedException("Access denied to this report entry")
     return populate_tanker_response(db, report)
 
 @router.patch("/{report_id}", response_model=TankerReportResponse)
@@ -99,21 +89,17 @@ def update_tanker_report(
     report_id: int,
     data: TankerReportUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    master: User = Depends(get_current_master)
 ):
-    report = tanker_report_service.get_tanker_report_by_id(db, report_id)
-    if current_user.role == UserRole.DRIVER and report.driver_id != current_user.id:
-        raise PermissionDeniedException("Access denied to update this report entry")
-    updated = tanker_report_service.update_tanker_report(db, report_id, data, current_user.id)
+    """Master endpoint to update a tanker report."""
+    updated = tanker_report_service.update_tanker_report(db, report_id, data, master.id)
     return populate_tanker_response(db, updated)
 
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_tanker_report(
     report_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    master: User = Depends(get_current_master)
 ):
-    report = tanker_report_service.get_tanker_report_by_id(db, report_id)
-    if current_user.role == UserRole.DRIVER and report.driver_id != current_user.id:
-        raise PermissionDeniedException("Access denied to delete this report entry")
-    tanker_report_service.delete_tanker_report(db, report_id, current_user.id)
+    """Master endpoint to delete a tanker report."""
+    tanker_report_service.delete_tanker_report(db, report_id, master.id)

@@ -3,8 +3,7 @@ const API_BASE = '/api/v1';
 let state = {
   token: localStorage.getItem('access_token') || null,
   user: null,
-  vehicles: [],
-  drivers: []
+  vehicles: []
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -52,21 +51,23 @@ function switchAuthTab(tab) {
     formRegister.style.display = 'block';
     tabLogin.classList.remove('active');
     tabRegister.classList.add('active');
-    if (authSubtitle) authSubtitle.innerText = 'Register a new account as Driver or Admin';
+    if (authSubtitle) authSubtitle.innerText = 'Register a new account as Master or Admin';
+    toggleAdminCodeInput();
   }
 }
 
 function toggleAdminCodeInput() {
   const roleSelect = document.getElementById('reg-role');
-  const adminCodeGroup = document.getElementById('reg-admin-code-group');
-  const adminCodeInput = document.getElementById('reg-admin-code');
+  const help = document.getElementById('txt-access-code-help');
+  const input = document.getElementById('reg-admin-code');
+  if (!roleSelect) return;
 
-  if (roleSelect && roleSelect.value === 'admin') {
-    if (adminCodeGroup) adminCodeGroup.style.display = 'block';
-    if (adminCodeInput) adminCodeInput.setAttribute('required', 'required');
+  if (roleSelect.value === 'master') {
+    if (help) help.innerText = 'Requires MASTER_ACCESS_2026 for Master operations account';
+    if (input) input.placeholder = 'Enter MASTER_ACCESS_2026';
   } else {
-    if (adminCodeGroup) adminCodeGroup.style.display = 'none';
-    if (adminCodeInput) adminCodeInput.removeAttribute('required');
+    if (help) help.innerText = 'Requires ADMIN_ACCESS_2026 for Admin auditor/approver account';
+    if (input) input.placeholder = 'Enter ADMIN_ACCESS_2026';
   }
 }
 
@@ -77,13 +78,13 @@ async function handleRegister(e) {
   const phone = document.getElementById('reg-phone').value || null;
   const password = document.getElementById('reg-password').value;
   const role = document.getElementById('reg-role').value;
-  const admin_access_code = role === 'admin' ? document.getElementById('reg-admin-code').value : null;
+  const access_code = document.getElementById('reg-admin-code').value;
 
   try {
     const res = await fetch(`${API_BASE}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, phone, password, role, admin_access_code })
+      body: JSON.stringify({ name, email, phone, password, role, access_code, admin_access_code: access_code })
     });
 
     if (!res.ok) {
@@ -181,7 +182,11 @@ function updateUserUI() {
     if (btnChangePassword) btnChangePassword.style.display = 'block';
 
     userNameDisplay.innerText = state.user.name;
-    userRoleBadge.innerText = state.user.role.toUpperCase();
+    const isMaster = state.user.role === 'master';
+    const isAdmin = state.user.role === 'admin';
+
+    userRoleBadge.innerText = isMaster ? 'MASTER' : 'ADMIN (AUDITOR)';
+    userRoleBadge.className = isMaster ? 'badge badge-primary' : 'badge badge-warning';
 
     const navDashboard = document.getElementById('nav-item-dashboard');
     const btnAddTax = document.getElementById('btn-add-tax-toggle');
@@ -189,25 +194,32 @@ function updateUserUI() {
     const btnAddCharge = document.getElementById('btn-add-charge-toggle');
     const btnAddChallan = document.getElementById('btn-add-challan-toggle');
     const btnSaveFastag = document.getElementById('btn-save-fastag');
+    const cardUploadDoc = document.getElementById('card-upload-doc');
+    const panelReuploadRequests = document.getElementById('panel-admin-reupload-requests');
+    const cardTankerForm = document.getElementById('card-tanker-form');
 
-    if (state.user.role === 'admin') {
-      userRoleBadge.className = 'badge badge-info';
+    if (navDashboard) navDashboard.style.display = 'inline-block';
+    if (btnExportTax) btnExportTax.style.display = 'inline-flex';
+
+    if (isMaster) {
       if (btnAddVehicle) btnAddVehicle.style.display = 'inline-flex';
-      if (navDashboard) navDashboard.style.display = 'inline-block';
       if (btnAddTax) btnAddTax.style.display = 'inline-flex';
-      if (btnExportTax) btnExportTax.style.display = 'inline-flex';
       if (btnAddCharge) btnAddCharge.style.display = 'inline-flex';
       if (btnAddChallan) btnAddChallan.style.display = 'inline-flex';
       if (btnSaveFastag) btnSaveFastag.style.display = 'inline-block';
+      if (cardUploadDoc) cardUploadDoc.style.display = 'block';
+      if (panelReuploadRequests) panelReuploadRequests.style.display = 'none';
+      if (cardTankerForm) cardTankerForm.style.display = 'block';
     } else {
-      userRoleBadge.className = 'badge badge-success';
+      // Admin: Monitor & Approver Mode
       if (btnAddVehicle) btnAddVehicle.style.display = 'none';
-      if (navDashboard) navDashboard.style.display = 'none'; // Hide Fleet Dashboard for Drivers
       if (btnAddTax) btnAddTax.style.display = 'none';
-      if (btnExportTax) btnExportTax.style.display = 'none';
       if (btnAddCharge) btnAddCharge.style.display = 'none';
       if (btnAddChallan) btnAddChallan.style.display = 'none';
       if (btnSaveFastag) btnSaveFastag.style.display = 'none';
+      if (cardUploadDoc) cardUploadDoc.style.display = 'none';
+      if (panelReuploadRequests) panelReuploadRequests.style.display = 'block';
+      if (cardTankerForm) cardTankerForm.style.display = 'none';
     }
   }
 }
@@ -226,11 +238,6 @@ function handleLogout() {
 
 // Navigation Tab Switching
 function switchTab(tabId) {
-  if (state.user && state.user.role !== 'admin' && tabId === 'dashboard') {
-    showToast('Access denied: Fleet Dashboard is restricted to Admin', 'error');
-    tabId = 'vehicles';
-  }
-
   document.querySelectorAll('.nav-link').forEach(link => {
     if (link.getAttribute('data-tab') === tabId) {
       link.classList.add('active');
@@ -241,7 +248,7 @@ function switchTab(tabId) {
 
   showSection(tabId);
 
-  if (tabId === 'dashboard' && state.user && state.user.role === 'admin') loadDashboardMetrics();
+  if (tabId === 'dashboard') loadDashboardMetrics();
   if (tabId === 'vehicles') loadVehicles();
   if (tabId === 'documents') loadDocuments();
   if (tabId === 'taxes') loadTaxes();
@@ -264,7 +271,9 @@ async function loadDashboardMetrics() {
 
     const data = await res.json();
     document.getElementById('metric-total-vehicles').innerText = data.total_vehicles;
-    document.getElementById('metric-total-drivers').innerText = data.total_drivers;
+    if (document.getElementById('metric-pending-reuploads')) {
+      document.getElementById('metric-pending-reuploads').innerText = data.pending_reupload_requests || 0;
+    }
     document.getElementById('metric-expired-docs').innerText = data.expired_documents;
     document.getElementById('metric-expiring-docs').innerText = data.documents_expiring_soon;
     document.getElementById('metric-monthly-freight').innerText = `₹${data.total_freight_this_month.toLocaleString()}`;
@@ -317,18 +326,17 @@ async function loadVehicles() {
 
 function renderVehiclesTable() {
   const tbody = document.getElementById('tbody-vehicles');
+  const isMaster = state.user && state.user.role === 'master';
+
   if (state.vehicles.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--color-text-muted);">No vehicles recorded yet. ${state.user && state.user.role === 'admin' ? "Click '+ Add Vehicle' to start." : ''}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--color-text-muted);">No vehicles recorded yet. ${isMaster ? "Click '+ Add Vehicle' to start." : ''}</td></tr>`;
     return;
   }
-
-  const isAdmin = state.user && state.user.role === 'admin';
 
   tbody.innerHTML = state.vehicles.map(v => `
     <tr>
       <td><strong>${v.vehicle_number}</strong></td>
       <td>${v.vehicle_class}</td>
-      <td>${v.active_driver ? v.active_driver.name : '<em style="color: var(--color-text-muted);">Unassigned</em>'}</td>
       <td>${v.make || ''} ${v.model || ''}</td>
       <td>${v.chassis_number || 'N/A'}</td>
       <td><span class="badge badge-${v.status.toLowerCase()}">${v.status}</span></td>
@@ -336,7 +344,7 @@ function renderVehiclesTable() {
         <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
           <button class="btn btn-secondary btn-sm" onclick="selectVehicleDocs(${v.id})">Docs</button>
           <button class="btn btn-secondary btn-sm" onclick="selectVehicleTaxes(${v.id})">Tax & Charges</button>
-          ${isAdmin ? `<button class="btn btn-accent btn-sm" onclick="openAssignDriverModal(${v.id}, '${v.vehicle_number}')">Assign Driver</button>` : ''}
+          ${isMaster ? `<button class="btn btn-danger btn-sm" onclick="handleDeleteVehicle(${v.id})">Delete</button>` : ''}
         </div>
       </td>
     </tr>
@@ -412,6 +420,10 @@ async function loadDocuments() {
   const vehicleId = sel.value;
   if (!vehicleId) return;
 
+  if (state.user && state.user.role === 'admin') {
+    loadPendingReuploadRequests();
+  }
+
   try {
     const res = await fetch(`${API_BASE}/documents/vehicle/${vehicleId}`, {
       headers: { 'Authorization': `Bearer ${state.token}` }
@@ -431,6 +443,48 @@ async function loadDocuments() {
   }
 }
 
+async function loadPendingReuploadRequests() {
+  const tbody = document.getElementById('tbody-reupload-requests');
+  const badge = document.getElementById('badge-reupload-count');
+  if (!tbody) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/documents/reupload-requests`, {
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+    if (!res.ok) return;
+
+    const requests = await res.json();
+    if (badge) badge.innerText = `${requests.length} Pending`;
+
+    if (requests.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--color-text-muted);">No pending re-upload requests</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = requests.map(d => `
+      <tr>
+        <td><strong>${d.vehicle_number || '#' + d.vehicle_id}</strong></td>
+        <td><span class="badge badge-info">${d.document_type}</span></td>
+        <td>${d.document_number || 'N/A'}</td>
+        <td>${d.expiry_date}</td>
+        <td><em style="color: var(--color-warning);">${d.reupload_reason || 'No reason specified'}</em></td>
+        <td>
+          <a href="${d.file_url}?token=${encodeURIComponent(state.token)}" target="_blank" class="btn btn-secondary btn-sm">📄 View</a>
+        </td>
+        <td>
+          <div style="display: flex; gap: 0.35rem;">
+            <button class="btn btn-sm btn-accent" onclick="handleApproveReupload(${d.id})">✓ Approve</button>
+            <button class="btn btn-sm btn-danger" onclick="handleRejectReupload(${d.id})">✕ Reject</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    console.error('Failed to load pending reupload requests', err);
+  }
+}
+
 function selectVehicleDocs(vehicleId) {
   switchTab('documents');
   const sel = document.getElementById('doc-vehicle-id');
@@ -447,37 +501,37 @@ function renderDocumentsTable(docs) {
     return;
   }
 
+  const isMaster = state.user && state.user.role === 'master';
   const isAdmin = state.user && state.user.role === 'admin';
-  const isDriver = state.user && state.user.role === 'driver';
 
   tbody.innerHTML = docs.map(d => {
-    // 1. Determine Re-upload status badge
+    // Determine Re-upload status badge
     let reuploadBadge = '<span class="badge badge-pending">Locked</span>';
     if (d.can_reupload) {
-      reuploadBadge = '<span class="badge badge-success">Unlocked</span>';
+      reuploadBadge = '<span class="badge badge-success">Approved (Unlocked)</span>';
     } else if (d.reupload_requested) {
       const reasonText = d.reupload_reason ? ` (${d.reupload_reason})` : '';
       reuploadBadge = `<span class="badge badge-warning" title="Requested: ${d.reupload_reason || 'No reason'}">Requested${reasonText}</span>`;
     }
 
-    // 2. Action buttons based on role & document status
+    // Action buttons based on role
     let actionButtons = '';
-
-    if (isAdmin) {
-      if (!d.can_reupload) {
-        const btnText = d.reupload_requested ? '✅ Approve Re-upload' : '🔓 Allow Re-upload';
-        const btnClass = d.reupload_requested ? 'btn-accent' : 'btn-secondary';
-        actionButtons += `<button class="btn ${btnClass} btn-sm" onclick="handleAllowReupload(${d.id})">${btnText}</button>`;
-      }
-    } else if (isDriver) {
-      if (!d.can_reupload && !d.reupload_requested) {
-        actionButtons += `<button class="btn btn-secondary btn-sm" onclick="handleRequestReupload(${d.id})">📩 Request Re-upload</button>`;
+    if (isMaster) {
+      if (d.can_reupload) {
+        actionButtons += `<span style="font-size: 0.75rem; color: var(--color-success); font-weight: 600;">Unlocked (Upload file above)</span>`;
       } else if (d.reupload_requested) {
         actionButtons += `<span style="font-size: 0.75rem; color: var(--color-warning);">Awaiting Admin Approval</span>`;
+      } else {
+        actionButtons += `<button class="btn btn-secondary btn-sm" onclick="openRequestReuploadModal(${d.id}, '${d.document_type}', '${d.document_number || ''}')">📋 Request Re-upload</button>`;
+      }
+      actionButtons += `<button class="btn btn-danger btn-sm" onclick="handleDeleteDocument(${d.id})">Delete</button>`;
+    } else if (isAdmin) {
+      if (d.reupload_requested) {
+        actionButtons += `<button class="btn btn-accent btn-sm" onclick="handleApproveReupload(${d.id})">✓ Approve</button> <button class="btn btn-danger btn-sm" onclick="handleRejectReupload(${d.id})">✕ Reject</button>`;
+      } else {
+        actionButtons += `<span style="font-size: 0.75rem; color: var(--color-text-muted);">Monitor Mode</span>`;
       }
     }
-
-    actionButtons += `<button class="btn btn-danger btn-sm" onclick="handleDeleteDocument(${d.id})">Delete</button>`;
 
     return `
       <tr>
@@ -491,7 +545,7 @@ function renderDocumentsTable(docs) {
           <a href="${d.file_url}?token=${encodeURIComponent(state.token)}" target="_blank" class="btn btn-secondary btn-sm">📄 View File</a>
         </td>
         <td>
-          <div style="display: flex; gap: 0.35rem; align-items: center;">
+          <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
             ${actionButtons}
           </div>
         </td>
@@ -524,6 +578,7 @@ async function handleDocumentUpload(e) {
     showToast('Document uploaded successfully', 'success');
     document.getElementById('form-upload-doc').reset();
     loadDocuments();
+    loadDashboardMetrics();
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -539,15 +594,29 @@ async function handleDeleteDocument(docId) {
     if (!res.ok) throw new Error('Failed to delete document');
     showToast('Document deleted', 'info');
     loadDocuments();
+    loadDashboardMetrics();
   } catch (err) {
     showToast(err.message, 'error');
   }
 }
 
-// Driver requests reupload permission
-async function handleRequestReupload(docId) {
-  const reason = prompt('Please enter the reason for re-uploading this document (e.g., Updated RC, Clearer scan needed):');
-  if (reason === null) return; // User clicked cancel
+// Master Re-upload Modal Handlers
+function openRequestReuploadModal(docId, docType, docNum) {
+  document.getElementById('req-reupload-doc-id').value = docId;
+  document.getElementById('req-reupload-doc-info').value = `${docType} (${docNum || 'No doc number'})`;
+  document.getElementById('req-reupload-reason').value = '';
+  document.getElementById('modal-request-reupload').classList.add('active');
+}
+
+function closeRequestReuploadModal() {
+  const modal = document.getElementById('modal-request-reupload');
+  if (modal) modal.classList.remove('active');
+}
+
+async function handleRequestReuploadSubmit(e) {
+  e.preventDefault();
+  const docId = document.getElementById('req-reupload-doc-id').value;
+  const reason = document.getElementById('req-reupload-reason').value;
 
   try {
     const res = await fetch(`${API_BASE}/documents/${docId}/request-reupload`, {
@@ -561,18 +630,20 @@ async function handleRequestReupload(docId) {
 
     if (!res.ok) {
       const err = await res.json();
-      throw new Error(err.detail || 'Failed to submit reupload request');
+      throw new Error(err.detail || 'Failed to submit re-upload request');
     }
 
-    showToast('Re-upload request sent to Admin', 'success');
+    showToast('Re-upload request sent to Admin for approval!', 'success');
+    closeRequestReuploadModal();
     loadDocuments();
+    loadDashboardMetrics();
   } catch (err) {
     showToast(err.message, 'error');
   }
 }
 
-// Admin allows reupload permission
-async function handleAllowReupload(docId) {
+// Admin Document Approval / Rejection Handlers
+async function handleApproveReupload(docId) {
   try {
     const res = await fetch(`${API_BASE}/documents/${docId}/allow-reupload`, {
       method: 'POST',
@@ -581,11 +652,32 @@ async function handleAllowReupload(docId) {
 
     if (!res.ok) {
       const err = await res.json();
-      throw new Error(err.detail || 'Failed to grant reupload permission');
+      throw new Error(err.detail || 'Failed to approve re-upload request');
     }
 
-    showToast('Re-upload permission granted to driver', 'success');
+    showToast('Re-upload permission granted to Master!', 'success');
     loadDocuments();
+    loadDashboardMetrics();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handleRejectReupload(docId) {
+  try {
+    const res = await fetch(`${API_BASE}/documents/${docId}/reject-reupload`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to reject re-upload request');
+    }
+
+    showToast('Re-upload request rejected', 'info');
+    loadDocuments();
+    loadDashboardMetrics();
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -742,82 +834,7 @@ async function handleAuthChangePassword(e) {
   }
 }
 
-// Assign Driver Modal Handlers (Admin Only)
-async function openAssignDriverModal(vehicleId, vehicleNumber) {
-  document.getElementById('assign-vehicle-id').value = vehicleId;
-  document.getElementById('assign-vehicle-number').value = vehicleNumber;
-
-  try {
-    const res = await fetch(`${API_BASE}/admin/drivers`, {
-      headers: { 'Authorization': `Bearer ${state.token}` }
-    });
-    if (!res.ok) throw new Error('Failed to fetch drivers list');
-
-    const drivers = await res.json();
-    const select = document.getElementById('assign-driver-id');
-    select.innerHTML = '<option value="">-- Choose Active Driver --</option>' +
-      drivers.map(d => `<option value="${d.id}">${d.name} (${d.email})</option>`).join('');
-
-    document.getElementById('modal-assign-driver').classList.add('active');
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-}
-
-function closeAssignDriverModal() {
-  const modal = document.getElementById('modal-assign-driver');
-  if (modal) modal.classList.remove('active');
-  const form = document.getElementById('form-assign-driver');
-  if (form) form.reset();
-}
-
-async function handleAssignDriver(e) {
-  e.preventDefault();
-  const vehicleId = document.getElementById('assign-vehicle-id').value;
-  const driverId = parseInt(document.getElementById('assign-driver-id').value);
-
-  try {
-    const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/assign`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${state.token}`
-      },
-      body: JSON.stringify({ driver_id: driverId })
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Failed to assign driver');
-    }
-
-    showToast('Driver assigned successfully!', 'success');
-    closeAssignDriverModal();
-    loadVehicles();
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-}
-
-// Admin Document Re-Upload Permission Grant Handler
-async function handleAllowReupload(docId) {
-  try {
-    const res = await fetch(`${API_BASE}/documents/${docId}/allow-reupload`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${state.token}` }
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Failed to grant re-upload permission');
-    }
-
-    showToast('Re-upload permission granted for driver!', 'success');
-    loadDocuments();
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-}
+// ==========================================
 
 // ==========================================
 // Vehicle Tax & Government Charges Module (Frontend)
@@ -912,7 +929,7 @@ function renderTaxCards(taxes, vehicleId) {
     return;
   }
 
-  const isAdmin = state.user && state.user.role === 'admin';
+  const isMaster = state.user && state.user.role === 'master';
 
   // Sort: Active and Due Soon first, then Overdue, then Expired
   const displayTaxes = [...taxes].slice(0, 6);
@@ -931,8 +948,10 @@ function renderTaxCards(taxes, vehicleId) {
       const receiptFilename = t.receipt_file_url.split('/').pop();
       const receiptUrl = `${API_BASE}/taxes/receipt/${receiptFilename}?token=${state.token}`;
       receiptButton = `<a href="${receiptUrl}" target="_blank" class="btn btn-secondary btn-sm">🧾 View Receipt</a>`;
-    } else {
+    } else if (isMaster) {
       receiptButton = `<button class="btn btn-secondary btn-sm" onclick="openTaxReceiptModal(${t.id}, ${vehicleId}, '${cleanTaxType} (₹${amountFmt})')">📤 Upload Receipt</button>`;
+    } else {
+      receiptButton = `<span style="font-size: 0.75rem; color: var(--color-text-muted);">No Receipt</span>`;
     }
 
     return `
@@ -959,7 +978,7 @@ function renderTaxCards(taxes, vehicleId) {
         </div>
         <div class="tax-card-actions">
           ${receiptButton}
-          ${isAdmin ? `<button class="btn btn-secondary btn-sm" style="color: var(--color-error);" onclick="handleDeleteTax(${t.id}, ${vehicleId})">Delete</button>` : ''}
+          ${isMaster ? `<button class="btn btn-secondary btn-sm" style="color: var(--color-error);" onclick="handleDeleteTax(${t.id}, ${vehicleId})">Delete</button>` : ''}
         </div>
       </div>
     `;
@@ -1159,7 +1178,7 @@ function renderGovernmentChargesTable(charges, vehicleId) {
     return;
   }
 
-  const isAdmin = state.user && state.user.role === 'admin';
+  const isMaster = state.user && state.user.role === 'master';
   tbody.innerHTML = charges.map(c => `
     <tr>
       <td><strong>${c.charge_type.replace(/_/g, ' ')}</strong></td>
@@ -1169,7 +1188,7 @@ function renderGovernmentChargesTable(charges, vehicleId) {
       <td>₹${Number(c.amount).toLocaleString('en-IN')}</td>
       <td><span class="badge badge-${c.status.toLowerCase()}">${c.status.replace(/_/g, ' ')}</span></td>
       <td>
-        ${isAdmin ? `<button class="btn btn-secondary btn-sm" style="color: var(--color-error);" onclick="handleDeleteCharge(${c.id}, ${vehicleId})">Delete</button>` : '-'}
+        ${isMaster ? `<button class="btn btn-secondary btn-sm" style="color: var(--color-error);" onclick="handleDeleteCharge(${c.id}, ${vehicleId})">Delete</button>` : '-'}
       </td>
     </tr>
   `).join('');
@@ -1264,7 +1283,7 @@ function renderChallansTable(challans, vehicleId) {
     return;
   }
 
-  const isAdmin = state.user && state.user.role === 'admin';
+  const isMaster = state.user && state.user.role === 'master';
   tbody.innerHTML = challans.map(ch => `
     <tr>
       <td><strong>${ch.challan_number}</strong></td>
@@ -1275,7 +1294,7 @@ function renderChallansTable(challans, vehicleId) {
       <td>₹${Number(ch.amount).toLocaleString('en-IN')}</td>
       <td><span class="badge badge-${ch.status.toLowerCase()}">${ch.status}</span></td>
       <td>
-        ${isAdmin ? `<button class="btn btn-secondary btn-sm" style="color: var(--color-error);" onclick="handleDeleteChallan(${ch.id}, ${vehicleId})">Delete</button>` : '-'}
+        ${isMaster ? `<button class="btn btn-secondary btn-sm" style="color: var(--color-error);" onclick="handleDeleteChallan(${ch.id}, ${vehicleId})">Delete</button>` : '-'}
       </td>
     </tr>
   `).join('');

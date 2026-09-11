@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.db.models.user import User
 from app.db.models.audit_log import AuditLog
-from app.core.dependencies import get_current_admin
+from app.core.dependencies import get_current_master_or_admin
 
 router = APIRouter(prefix="/reports", tags=["Reports & Audits"])
 
@@ -14,7 +14,7 @@ def get_audit_logs(
     limit: int = 100,
     action: Optional[str] = None,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
+    current_user: User = Depends(get_current_master_or_admin)
 ):
     query = db.query(AuditLog)
     if action:

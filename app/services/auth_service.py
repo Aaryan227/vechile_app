@@ -27,9 +27,15 @@ def register_user(db: Session, data: RegisterRequest) -> User:
     if data.phone and db.query(User).filter(User.phone == data.phone).first():
         raise ConflictException("Phone number is already registered")
     
-    if data.role == UserRole.ADMIN:
-        if not data.admin_access_code or data.admin_access_code != settings.ADMIN_ACCESS_CODE:
+    code = data.access_code or data.admin_access_code
+    if data.role == UserRole.MASTER:
+        if not code or code != settings.MASTER_ACCESS_CODE:
+            raise BadRequestException("Invalid Master Access Code")
+    elif data.role == UserRole.ADMIN:
+        if not code or code != settings.ADMIN_ACCESS_CODE:
             raise BadRequestException("Invalid Admin Access Code")
+    elif data.role == UserRole.DRIVER:
+        raise BadRequestException("Driver registration is no longer supported")
     
     user = User(
         name=data.name,

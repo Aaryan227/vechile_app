@@ -36,9 +36,9 @@ def create_or_update_document(
     status = compute_document_status(expiry_date)
 
     if existing_doc:
-        if is_driver and not existing_doc.can_reupload:
+        if not existing_doc.can_reupload:
             raise PermissionDeniedException(
-                "Document has already been uploaded for this vehicle. You need permission from an admin to update or re-upload it."
+                "Document has already been uploaded for this vehicle. A re-upload request must be approved by an Admin."
             )
         
         existing_doc.document_number = document_number
@@ -125,6 +125,24 @@ def grant_reupload_permission(db: Session, document_id: int, admin_id: int) -> D
     audit = AuditLog(
         user_id=admin_id,
         action="GRANT_DOCUMENT_REUPLOAD",
+        entity_type="document",
+        entity_id=doc.id
+    )
+    db.add(audit)
+    db.commit()
+    return doc
+
+def reject_reupload_permission(db: Session, document_id: int, admin_id: int) -> Document:
+    doc = get_document_by_id(db, document_id)
+    doc.can_reupload = False
+    doc.reupload_requested = False
+    doc.reupload_reason = None
+    db.commit()
+    db.refresh(doc)
+    
+    audit = AuditLog(
+        user_id=admin_id,
+        action="REJECT_DOCUMENT_REUPLOAD",
         entity_type="document",
         entity_id=doc.id
     )
