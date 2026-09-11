@@ -62,18 +62,15 @@ function toggleAdminCodeInput() {
   const input = document.getElementById('reg-admin-code');
   if (!roleSelect) return;
 
+  if (input) {
+    input.type = 'password';
+    input.placeholder = '••••••••••••';
+  }
+
   if (roleSelect.value === 'master') {
-    if (help) help.innerText = 'Code: MASTER_ACCESS_2026 for Master operations account';
-    if (input) {
-      input.placeholder = 'MASTER_ACCESS_2026';
-      if (input.value === 'ADMIN_ACCESS_2026') input.value = 'MASTER_ACCESS_2026';
-    }
+    if (help) help.innerText = 'Enter authorized Master security access code';
   } else {
-    if (help) help.innerText = 'Code: ADMIN_ACCESS_2026 for Admin auditor/approver account';
-    if (input) {
-      input.placeholder = 'ADMIN_ACCESS_2026';
-      if (input.value === 'MASTER_ACCESS_2026') input.value = 'ADMIN_ACCESS_2026';
-    }
+    if (help) help.innerText = 'Enter authorized Admin security access code';
   }
 }
 
