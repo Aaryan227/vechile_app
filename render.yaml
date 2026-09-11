@@ -12,8 +12,10 @@ services:
           property: connectionString
       - key: SECRET_KEY
         generateValue: true
+      - key: MASTER_ACCESS_CODE
+        value: MASTER_ACCESS_2026
       - key: ADMIN_ACCESS_CODE
-        sync: false
+        value: ADMIN_ACCESS_2026
       - key: PYTHON_VERSION
         value: 3.11.0
 

@@ -92,9 +92,28 @@ def seed_initial_data():
     finally:
         db.close()
 
+from sqlalchemy import text
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: create tables & seed initial data
+    # Startup: ensure PostgreSQL compatibility & create tables
+    try:
+        with engine.connect() as conn:
+            if engine.dialect.name == "postgresql":
+                try:
+                    conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'MASTER'"))
+                    conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'master'"))
+                    conn.commit()
+                except Exception:
+                    pass
+                try:
+                    conn.execute(text("ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(20) USING role::text"))
+                    conn.commit()
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.warning(f"Database dialect compatibility check notice: {e}")
+
     Base.metadata.create_all(bind=engine)
     seed_initial_data()
     yield
