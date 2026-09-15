@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.db.models.user import User
-from app.core.dependencies import get_current_master, get_current_master_or_admin
+from app.core.dependencies import get_current_master, get_current_admin, get_current_master_or_admin
 from app.core.exceptions import NotFoundException, CredentialsException
 from app.core.config import settings
 from app.core.security import decode_token
@@ -93,13 +93,13 @@ def delete_vehicle_tax(
     vehicle_id: int,
     tax_id: int,
     db: Session = Depends(get_db),
-    master: User = Depends(get_current_master)
+    admin: User = Depends(get_current_admin)
 ):
-    verify_vehicle_access(db, vehicle_id, master)
+    verify_vehicle_access(db, vehicle_id, admin)
     tax = tax_service.get_tax_by_id(db, tax_id)
     if tax.vehicle_id != vehicle_id:
         raise NotFoundException("Tax record not found for this vehicle")
-    tax_service.delete_tax_record(db, tax_id, master.id)
+    tax_service.delete_tax_record(db, tax_id, admin.id)
 
 
 @router.post("/vehicles/{vehicle_id}/taxes/{tax_id}/receipt", response_model=TaxRecordResponse)

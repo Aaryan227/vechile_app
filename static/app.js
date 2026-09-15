@@ -25,6 +25,20 @@ function formatDocumentType(type) {
   return DOCUMENT_TYPE_LABELS[type] || type;
 }
 
+const TAX_TYPE_LABELS = {
+  'ROAD_TAX': 'Road Tax',
+  'MOTOR_VEHICLE_TAX': 'Motor Vehicle Tax',
+  'ADDITIONAL_MOTOR_VEHICLE_TAX': 'Additional Motor Vehicle Tax',
+  'STATE_VEHICLE_TAX': 'State Vehicle Tax',
+  'DANDA_TAX': 'Danda Tax',
+  'GREEN_TAX': 'Green Tax',
+  'OTHER_TAX': 'Other Tax'
+};
+
+function formatTaxType(type) {
+  return TAX_TYPE_LABELS[type] || (type ? type.replace(/_/g, ' ') : '');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Set default dates
   const todayStr = new Date().toISOString().split('T')[0];
@@ -964,12 +978,13 @@ function renderTaxCards(taxes, vehicleId) {
     container.innerHTML = `
       <div style="grid-column: 1 / -1; background: var(--color-surface); padding: 2rem; border-radius: var(--radius-md); border: 1px dashed var(--color-border); text-align: center; color: var(--color-text-muted);">
         No active tax records recorded for this vehicle.
-        ${state.user && state.user.role === 'admin' ? '<br><button class="btn btn-accent btn-sm" style="margin-top: 0.75rem;" onclick="toggleAddTaxForm()">+ Record Tax Payment</button>' : ''}
+        ${state.user && state.user.role === 'master' ? '<br><button class="btn btn-accent btn-sm" style="margin-top: 0.75rem;" onclick="toggleAddTaxForm()">+ Record Tax Payment</button>' : ''}
       </div>`;
     return;
   }
 
   const isMaster = state.user && state.user.role === 'master';
+  const isAdmin = state.user && state.user.role === 'admin';
 
   // Sort: Active and Due Soon first, then Overdue, then Expired
   const displayTaxes = [...taxes].slice(0, 6);
@@ -981,7 +996,7 @@ function renderTaxCards(taxes, vehicleId) {
     const paidStr = t.payment_date ? new Date(t.payment_date).toLocaleDateString('en-GB') : 'Unpaid';
     const dueStr = t.due_date ? new Date(t.due_date).toLocaleDateString('en-GB') : 'N/A';
 
-    const cleanTaxType = t.tax_type.replace(/_/g, ' ');
+    const cleanTaxType = formatTaxType(t.tax_type);
 
     let receiptButton = '';
     if (t.receipt_file_url) {
@@ -1018,7 +1033,7 @@ function renderTaxCards(taxes, vehicleId) {
         </div>
         <div class="tax-card-actions">
           ${receiptButton}
-          ${isMaster ? `<button class="btn btn-secondary btn-sm" style="color: var(--color-error);" onclick="handleDeleteTax(${t.id}, ${vehicleId})">Delete</button>` : ''}
+          ${isAdmin ? `<button class="btn btn-secondary btn-sm" style="color: var(--color-error);" onclick="handleDeleteTax(${t.id}, ${vehicleId})">Delete</button>` : ''}
         </div>
       </div>
     `;
@@ -1048,7 +1063,7 @@ function renderTaxHistoryTable(taxes) {
     return `
       <tr>
         <td>${pStart} – ${pEnd}</td>
-        <td><strong>${t.tax_type.replace(/_/g, ' ')}</strong></td>
+        <td><strong>${formatTaxType(t.tax_type)}</strong></td>
         <td>${t.state}</td>
         <td>₹${Number(t.amount).toLocaleString('en-IN')}</td>
         <td>${paid}</td>

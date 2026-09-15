@@ -9,6 +9,8 @@ class TaxType(str, enum.Enum):
     MOTOR_VEHICLE_TAX = "MOTOR_VEHICLE_TAX"
     ADDITIONAL_MOTOR_VEHICLE_TAX = "ADDITIONAL_MOTOR_VEHICLE_TAX"
     STATE_VEHICLE_TAX = "STATE_VEHICLE_TAX"
+    DANDA_TAX = "DANDA_TAX"
+    GREEN_TAX = "GREEN_TAX"
     OTHER_TAX = "OTHER_TAX"
 
 class ChargeType(str, enum.Enum):
@@ -41,7 +43,7 @@ class VehicleTaxRecord(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     vehicle_id = Column(Integer, ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False, index=True)
-    tax_type = Column(Enum(TaxType), nullable=False, index=True)
+    tax_type = Column(Enum(TaxType, native_enum=False, create_constraint=False), nullable=False, index=True)
     state = Column(String(50), nullable=False, index=True)
     tax_authority = Column(String(100), nullable=True)
     period_start = Column(Date, nullable=False)

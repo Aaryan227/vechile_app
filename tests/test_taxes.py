@@ -45,7 +45,7 @@ def test_tax_status_computation():
     assert status_active == TaxStatus.ACTIVE
 
 
-def test_tax_crud_master(client, master_headers, sample_vehicle, db):
+def test_tax_crud_master(client, master_headers, admin_headers, sample_vehicle, db):
     today = date.today()
     payload = {
         "tax_type": "ROAD_TAX",
@@ -90,9 +90,13 @@ def test_tax_crud_master(client, master_headers, sample_vehicle, db):
     assert res_patch.status_code == 200
     assert res_patch.json()["amount"] == 45000.0
 
-    # Delete Tax Record
-    res_del = client.delete(f"/api/v1/vehicles/{sample_vehicle.id}/taxes/{tax_id}", headers=master_headers)
-    assert res_del.status_code == 204
+    # Master attempting to delete tax record -> 403 Forbidden (requires Admin permission)
+    res_del_master = client.delete(f"/api/v1/vehicles/{sample_vehicle.id}/taxes/{tax_id}", headers=master_headers)
+    assert res_del_master.status_code == 403
+
+    # Admin deletes tax record with required permission -> 204 No Content
+    res_del_admin = client.delete(f"/api/v1/vehicles/{sample_vehicle.id}/taxes/{tax_id}", headers=admin_headers)
+    assert res_del_admin.status_code == 204
 
 
 def test_duplicate_tax_prevention(client, master_headers, sample_vehicle):
@@ -256,3 +260,108 @@ def test_dashboard_metrics_includes_tax_and_pending_reuploads(client, admin_head
     assert "taxes_overdue" in data
     assert "taxes_expired" in data
     assert "pending_reupload_requests" in data
+
+
+def test_danda_tax_lifecycle(client, master_headers, admin_headers, sample_vehicle):
+    today = date.today()
+    payload = {
+        "tax_type": "DANDA_TAX",
+        "state": "Haryana",
+        "tax_authority": "RTO Gurugram",
+        "amount": 18500.0,
+        "period_start": str(today - timedelta(days=10)),
+        "period_end": str(today + timedelta(days=355)),
+        "payment_date": str(today - timedelta(days=10)),
+        "due_date": str(today - timedelta(days=5)),
+        "valid_from": str(today - timedelta(days=10)),
+        "valid_until": str(today + timedelta(days=355)),
+        "payment_reference": "DANDA-TXN-2026-01",
+        "challan_number": "DANDA-CH-9912",
+        "notes": "Annual Danda Tax assessed as per Haryana Commercial Vehicles Act"
+    }
+
+    # 1. Master creates Danda Tax
+    res_create = client.post(f"/api/v1/vehicles/{sample_vehicle.id}/taxes", json=payload, headers=master_headers)
+    assert res_create.status_code == 201
+    tax_data = res_create.json()
+    assert tax_data["tax_type"] == "DANDA_TAX"
+    assert tax_data["amount"] == 18500.0
+    assert tax_data["state"] == "Haryana"
+    assert tax_data["tax_authority"] == "RTO Gurugram"
+    assert tax_data["status"] == "ACTIVE"
+    tax_id = tax_data["id"]
+
+    # 2. Master uploads receipt
+    dummy_pdf = io.BytesIO(b"%PDF-1.4 dummy danda tax receipt")
+    dummy_pdf.name = "danda_receipt.pdf"
+    res_upload = client.post(
+        f"/api/v1/vehicles/{sample_vehicle.id}/taxes/{tax_id}/receipt",
+        files={"file": ("danda_receipt.pdf", dummy_pdf, "application/pdf")},
+        headers=master_headers
+    )
+    assert res_upload.status_code == 200
+    assert res_upload.json()["receipt_file_url"] is not None
+
+    # 3. Master updates notes and amount
+    res_patch = client.patch(
+        f"/api/v1/vehicles/{sample_vehicle.id}/taxes/{tax_id}",
+        json={"amount": 19000.0, "notes": "Updated Danda Tax assessment"},
+        headers=master_headers
+    )
+    assert res_patch.status_code == 200
+    assert res_patch.json()["amount"] == 19000.0
+
+    # 4. Admin monitors and retrieves Danda Tax record
+    res_admin_view = client.get(f"/api/v1/vehicles/{sample_vehicle.id}/taxes/{tax_id}", headers=admin_headers)
+    assert res_admin_view.status_code == 200
+    assert res_admin_view.json()["tax_type"] == "DANDA_TAX"
+
+    # 5. Master attempts to delete -> 403 (permission from admin required)
+    res_master_delete = client.delete(f"/api/v1/vehicles/{sample_vehicle.id}/taxes/{tax_id}", headers=master_headers)
+    assert res_master_delete.status_code == 403
+
+    # 6. Admin deletes Danda Tax record -> 204
+    res_admin_delete = client.delete(f"/api/v1/vehicles/{sample_vehicle.id}/taxes/{tax_id}", headers=admin_headers)
+    assert res_admin_delete.status_code == 204
+
+
+def test_green_tax_lifecycle(client, master_headers, admin_headers, sample_vehicle):
+    today = date.today()
+    payload = {
+        "tax_type": "GREEN_TAX",
+        "state": "Delhi",
+        "tax_authority": "Transport Department GNCTD",
+        "amount": 7500.0,
+        "period_start": str(today),
+        "period_end": str(today + timedelta(days=365)),
+        "payment_date": str(today),
+        "due_date": str(today + timedelta(days=30)),
+        "valid_from": str(today),
+        "valid_until": str(today + timedelta(days=365)),
+        "payment_reference": "GREEN-TAX-DL-8877",
+        "challan_number": "GT-DL-2026",
+        "notes": "Green Tax / Environmental Cess for commercial vehicle entry"
+    }
+
+    # 1. Master creates Green Tax
+    res_create = client.post(f"/api/v1/vehicles/{sample_vehicle.id}/taxes", json=payload, headers=master_headers)
+    assert res_create.status_code == 201
+    tax_data = res_create.json()
+    assert tax_data["tax_type"] == "GREEN_TAX"
+    assert tax_data["amount"] == 7500.0
+    assert tax_data["state"] == "Delhi"
+    assert tax_data["status"] == "ACTIVE"
+    tax_id = tax_data["id"]
+
+    # 2. Admin monitors fleet taxes and filters by tax_type GREEN_TAX
+    res_fleet = client.get("/api/v1/admin/taxes?tax_type=GREEN_TAX", headers=admin_headers)
+    assert res_fleet.status_code == 200
+    assert any(t["id"] == tax_id for t in res_fleet.json())
+
+    # 3. Master attempts to delete -> 403 (permission from admin required)
+    res_master_delete = client.delete(f"/api/v1/vehicles/{sample_vehicle.id}/taxes/{tax_id}", headers=master_headers)
+    assert res_master_delete.status_code == 403
+
+    # 4. Admin deletes Green Tax record -> 204
+    res_admin_delete = client.delete(f"/api/v1/vehicles/{sample_vehicle.id}/taxes/{tax_id}", headers=admin_headers)
+    assert res_admin_delete.status_code == 204

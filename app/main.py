@@ -123,6 +123,18 @@ async def lifespan(app: FastAPI):
                     conn.commit()
                 except Exception:
                     pass
+                try:
+                    tax_types = ["DANDA_TAX", "GREEN_TAX"]
+                    for tt in tax_types:
+                        try:
+                            conn.execute(text(f"ALTER TYPE taxtype ADD VALUE IF NOT EXISTS '{tt}'"))
+                            conn.commit()
+                        except Exception:
+                            pass
+                    conn.execute(text("ALTER TABLE vehicle_tax_records ALTER COLUMN tax_type TYPE VARCHAR(50) USING tax_type::text"))
+                    conn.commit()
+                except Exception:
+                    pass
     except Exception as e:
         logger.warning(f"Database dialect compatibility check notice: {e}")
 
