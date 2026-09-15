@@ -111,6 +111,18 @@ async def lifespan(app: FastAPI):
                     conn.commit()
                 except Exception:
                     pass
+                try:
+                    doc_types = ["EXPLOSIVE_LICENSE", "EXPLOSIVE_VEHICLE_CERTIFICATE", "PESO_CERTIFICATE", "SAFETY_CERTIFICATE", "OTHER_CERTIFICATE", "NATIONAL_PERMIT"]
+                    for dt in doc_types:
+                        try:
+                            conn.execute(text(f"ALTER TYPE documenttype ADD VALUE IF NOT EXISTS '{dt}'"))
+                            conn.commit()
+                        except Exception:
+                            pass
+                    conn.execute(text("ALTER TABLE documents ALTER COLUMN document_type TYPE VARCHAR(50) USING document_type::text"))
+                    conn.commit()
+                except Exception:
+                    pass
     except Exception as e:
         logger.warning(f"Database dialect compatibility check notice: {e}")
 

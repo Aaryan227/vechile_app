@@ -286,7 +286,7 @@
         <div class="section-header">
           <div>
             <h1 class="section-title">Vehicle Documents</h1>
-            <p class="section-subtitle">Upload & track RC, Insurance, Permit, Fitness, and PUC documents</p>
+            <p class="section-subtitle">Upload & track RC, Insurance, Permit, Fitness, PUC, Explosive License, PESO & Safety certificates</p>
           </div>
         </div>
 
@@ -337,18 +337,22 @@
               <div class="form-group">
                 <label>Document Category *</label>
                 <select id="doc-type" class="form-control" required>
-                  <option value="RC">RC (Registration Certificate)</option>
-                  <option value="INSURANCE">Insurance</option>
-                  <option value="PERMIT">Permit</option>
-                  <option value="FITNESS">Fitness Certificate</option>
-                  <option value="PUC">PUC (Pollution Check)</option>
-                  <option value="OTHER">Other Document</option>
+                  <option value="RC">1. RC</option>
+                  <option value="INSURANCE">2. Insurance</option>
+                  <option value="PERMIT">3. Permit</option>
+                  <option value="FITNESS">4. Fitness Certificate</option>
+                  <option value="PUC">5. PUC</option>
+                  <option value="EXPLOSIVE_LICENSE">6. Explosive License / Authorization</option>
+                  <option value="EXPLOSIVE_VEHICLE_CERTIFICATE">7. Explosive Vehicle Certificate</option>
+                  <option value="PESO_CERTIFICATE">8. PESO-related Certificate</option>
+                  <option value="SAFETY_CERTIFICATE">9. Safety Certificate</option>
+                  <option value="OTHER_CERTIFICATE">10. Other Required Certificate</option>
                 </select>
               </div>
 
               <div class="form-group">
                 <label>Document Number</label>
-                <input type="text" id="doc-number" class="form-control" placeholder="INS-998231">
+                <input type="text" id="doc-number" class="form-control" placeholder="DOC-998231">
               </div>
 
               <div class="form-group">
@@ -366,6 +370,27 @@
               <button type="submit" class="btn btn-accent">Upload Document</button>
             </div>
           </form>
+        </div>
+
+        <!-- Documents Filter & Overview Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.75rem;">
+          <h3 style="margin: 0; font-size: 1.1rem; color: var(--color-text-main);">Vehicle Documents List</h3>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <label for="filter-doc-type" style="font-size: 0.85rem; color: var(--color-text-muted); margin: 0;">Filter Category:</label>
+            <select id="filter-doc-type" class="form-control" style="width: auto; padding: 0.35rem 0.75rem; font-size: 0.85rem;" onchange="loadDocuments()">
+              <option value="">All Document Categories</option>
+              <option value="RC">RC</option>
+              <option value="INSURANCE">Insurance</option>
+              <option value="PERMIT">Permit</option>
+              <option value="FITNESS">Fitness Certificate</option>
+              <option value="PUC">PUC</option>
+              <option value="EXPLOSIVE_LICENSE">Explosive License / Authorization</option>
+              <option value="EXPLOSIVE_VEHICLE_CERTIFICATE">Explosive Vehicle Certificate</option>
+              <option value="PESO_CERTIFICATE">PESO-related Certificate</option>
+              <option value="SAFETY_CERTIFICATE">Safety Certificate</option>
+              <option value="OTHER_CERTIFICATE">Other Required Certificate</option>
+            </select>
+          </div>
         </div>
 
         <!-- Documents Table -->

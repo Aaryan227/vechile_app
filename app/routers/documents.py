@@ -108,12 +108,13 @@ def get_reupload_requests(
 @router.get("/vehicle/{vehicle_id}", response_model=List[DocumentResponse])
 def get_documents_by_vehicle(
     vehicle_id: int,
+    document_type: Optional[DocumentType] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_master_or_admin)
 ):
     """Get all documents for a vehicle (accessible to Master and Admin monitors)."""
     vehicle_service.get_vehicle_by_id(db, vehicle_id)
-    docs = document_service.get_documents_for_vehicle(db, vehicle_id)
+    docs = document_service.get_documents_for_vehicle(db, vehicle_id, document_type=document_type)
     return [populate_doc_response(db, d) for d in docs]
 
 

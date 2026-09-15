@@ -7,10 +7,15 @@ from app.db.session import Base
 class DocumentType(str, enum.Enum):
     RC = "RC"
     INSURANCE = "INSURANCE"
-    NATIONAL_PERMIT ="NATIONAL_PERMIT"
     PERMIT = "PERMIT"
+    NATIONAL_PERMIT = "NATIONAL_PERMIT"
     FITNESS = "FITNESS"
     PUC = "PUC"
+    EXPLOSIVE_LICENSE = "EXPLOSIVE_LICENSE"
+    EXPLOSIVE_VEHICLE_CERTIFICATE = "EXPLOSIVE_VEHICLE_CERTIFICATE"
+    PESO_CERTIFICATE = "PESO_CERTIFICATE"
+    SAFETY_CERTIFICATE = "SAFETY_CERTIFICATE"
+    OTHER_CERTIFICATE = "OTHER_CERTIFICATE"
     OTHER = "OTHER"
 
 class DocumentStatus(str, enum.Enum):
@@ -23,7 +28,7 @@ class Document(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     vehicle_id = Column(Integer, ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False, index=True)
-    document_type = Column(Enum(DocumentType), nullable=False)
+    document_type = Column(Enum(DocumentType, native_enum=False, create_constraint=False), nullable=False)
     document_number = Column(String(100), nullable=True)
     issue_date = Column(Date, nullable=True)
     expiry_date = Column(Date, nullable=False, index=True)

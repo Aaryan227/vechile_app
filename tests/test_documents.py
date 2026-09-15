@@ -146,3 +146,71 @@ def test_change_password_endpoint(client, master_headers):
     )
     assert res.status_code == 200
     assert res.json()["message"] == "Password changed successfully"
+
+def test_explosive_and_safety_documents_flow(client, db, test_master, test_admin, master_headers, admin_headers):
+    # 1. Create a vehicle
+    v = Vehicle(
+        vehicle_number="MH04EXP9999",
+        vehicle_class="Tanker",
+        chassis_number="CHASSIS_EXP_9999",
+        engine_number="ENGINE_EXP_9999"
+    )
+    db.add(v)
+    db.commit()
+    db.refresh(v)
+
+    # 2. Upload explosive documents: EXPLOSIVE_LICENSE, EXPLOSIVE_VEHICLE_CERTIFICATE, PESO_CERTIFICATE, SAFETY_CERTIFICATE
+    explosive_types = [
+        ("EXPLOSIVE_LICENSE", "EXP-LIC-101"),
+        ("EXPLOSIVE_VEHICLE_CERTIFICATE", "EVC-202"),
+        ("PESO_CERTIFICATE", "PESO-303"),
+        ("SAFETY_CERTIFICATE", "SAFE-404"),
+        ("OTHER_CERTIFICATE", "OTH-505"),
+    ]
+
+    for doc_type, doc_num in explosive_types:
+        res = client.post(
+            "/api/v1/documents/upload",
+            headers=master_headers,
+            data={
+                "vehicle_id": v.id,
+                "document_type": doc_type,
+                "expiry_date": "2029-06-30",
+                "document_number": doc_num
+            },
+            files={"file": (f"{doc_type.lower()}.pdf", BytesIO(b"dummy binary pdf content"), "application/pdf")}
+        )
+        assert res.status_code == 201, f"Failed uploading {doc_type}: {res.text}"
+        data = res.json()
+        assert data["document_type"] == doc_type
+        assert data["document_number"] == doc_num
+        assert data["vehicle_number"] == "MH04EXP9999"
+
+    # 3. Query all documents for vehicle
+    res_all = client.get(f"/api/v1/documents/vehicle/{v.id}", headers=admin_headers)
+    assert res_all.status_code == 200
+    all_docs = res_all.json()
+    assert len(all_docs) == 5
+
+    # 4. Query filtered by document_type=PESO_CERTIFICATE
+    res_peso = client.get(f"/api/v1/documents/vehicle/{v.id}?document_type=PESO_CERTIFICATE", headers=admin_headers)
+    assert res_peso.status_code == 200
+    peso_docs = res_peso.json()
+    assert len(peso_docs) == 1
+    assert peso_docs[0]["document_type"] == "PESO_CERTIFICATE"
+    assert peso_docs[0]["document_number"] == "PESO-303"
+
+    # 5. Re-upload explosive document without permission should be 403
+    res_dup = client.post(
+        "/api/v1/documents/upload",
+        headers=master_headers,
+        data={
+            "vehicle_id": v.id,
+            "document_type": "EXPLOSIVE_LICENSE",
+            "expiry_date": "2030-06-30",
+            "document_number": "EXP-LIC-101-NEW"
+        },
+        files={"file": ("new_lic.pdf", BytesIO(b"new content"), "application/pdf")}
+    )
+    assert res_dup.status_code == 403
+

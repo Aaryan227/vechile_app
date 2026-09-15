@@ -150,8 +150,11 @@ def reject_reupload_permission(db: Session, document_id: int, admin_id: int) -> 
     db.commit()
     return doc
 
-def get_documents_for_vehicle(db: Session, vehicle_id: int) -> List[Document]:
-    docs = db.query(Document).filter(Document.vehicle_id == vehicle_id).all()
+def get_documents_for_vehicle(db: Session, vehicle_id: int, document_type: Optional[DocumentType] = None) -> List[Document]:
+    query = db.query(Document).filter(Document.vehicle_id == vehicle_id)
+    if document_type:
+        query = query.filter(Document.document_type == document_type)
+    docs = query.all()
     updated = False
     for doc in docs:
         if doc.can_reupload is None:

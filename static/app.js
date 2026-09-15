@@ -6,6 +6,25 @@ let state = {
   vehicles: []
 };
 
+const DOCUMENT_TYPE_LABELS = {
+  'RC': 'RC',
+  'INSURANCE': 'Insurance',
+  'PERMIT': 'Permit',
+  'NATIONAL_PERMIT': 'National Permit',
+  'FITNESS': 'Fitness Certificate',
+  'PUC': 'PUC',
+  'EXPLOSIVE_LICENSE': 'Explosive License / Authorization',
+  'EXPLOSIVE_VEHICLE_CERTIFICATE': 'Explosive Vehicle Certificate',
+  'PESO_CERTIFICATE': 'PESO-related Certificate',
+  'SAFETY_CERTIFICATE': 'Safety Certificate',
+  'OTHER_CERTIFICATE': 'Other Required Certificate',
+  'OTHER': 'Other Required Certificate'
+};
+
+function formatDocumentType(type) {
+  return DOCUMENT_TYPE_LABELS[type] || type;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Set default dates
   const todayStr = new Date().toISOString().split('T')[0];
@@ -313,7 +332,7 @@ async function loadDashboardMetrics() {
         tbody.innerHTML = expiringDocs.map(d => `
           <tr>
             <td><strong>Vehicle #${d.vehicle_id}</strong></td>
-            <td>${d.document_type}</td>
+            <td><strong>${formatDocumentType(d.document_type)}</strong></td>
             <td>${d.document_number || 'N/A'}</td>
             <td>${d.expiry_date}</td>
             <td><span class="badge badge-${d.status.toLowerCase()}">${d.status}</span></td>
@@ -442,8 +461,11 @@ async function loadDocuments() {
     loadPendingReuploadRequests();
   }
 
+  const filterType = document.getElementById('filter-doc-type')?.value || '';
+  const queryParam = filterType ? `?document_type=${encodeURIComponent(filterType)}` : '';
+
   try {
-    const res = await fetch(`${API_BASE}/documents/vehicle/${vehicleId}`, {
+    const res = await fetch(`${API_BASE}/documents/vehicle/${vehicleId}${queryParam}`, {
       headers: { 'Authorization': `Bearer ${state.token}` }
     });
     if (!res.ok) {
@@ -483,7 +505,7 @@ async function loadPendingReuploadRequests() {
     tbody.innerHTML = requests.map(d => `
       <tr>
         <td><strong>${d.vehicle_number || '#' + d.vehicle_id}</strong></td>
-        <td><span class="badge badge-info">${d.document_type}</span></td>
+        <td><span class="badge badge-info">${formatDocumentType(d.document_type)}</span></td>
         <td>${d.document_number || 'N/A'}</td>
         <td>${d.expiry_date}</td>
         <td><em style="color: var(--color-warning);">${d.reupload_reason || 'No reason specified'}</em></td>
@@ -554,7 +576,7 @@ function renderDocumentsTable(docs) {
     return `
       <tr>
         <td>#${d.vehicle_id}</td>
-        <td><strong>${d.document_type}</strong></td>
+        <td><strong>${formatDocumentType(d.document_type)}</strong></td>
         <td>${d.document_number || 'N/A'}</td>
         <td>${d.expiry_date}</td>
         <td><span class="badge badge-${d.status.toLowerCase()}">${d.status}</span></td>
@@ -621,7 +643,7 @@ async function handleDeleteDocument(docId) {
 // Master Re-upload Modal Handlers
 function openRequestReuploadModal(docId, docType, docNum) {
   document.getElementById('req-reupload-doc-id').value = docId;
-  document.getElementById('req-reupload-doc-info').value = `${docType} (${docNum || 'No doc number'})`;
+  document.getElementById('req-reupload-doc-info').value = `${formatDocumentType(docType)} (${docNum || 'No doc number'})`;
   document.getElementById('req-reupload-reason').value = '';
   document.getElementById('modal-request-reupload').classList.add('active');
 }
