@@ -10,18 +10,23 @@ from app.services import vehicle_service
 router = APIRouter(prefix="/vehicles", tags=["Vehicles Management"])
 
 def populate_vehicle_response(vehicle) -> VehicleResponse:
-    return VehicleResponse.model_validate(vehicle)
+    res = VehicleResponse.model_validate(vehicle)
+    if hasattr(vehicle, "firm") and vehicle.firm:
+        res.firm_name = vehicle.firm.name
+        res.firm_id = vehicle.firm_id
+    return res
 
 @router.get("", response_model=List[VehicleResponse])
 def list_vehicles(
     skip: int = 0,
     limit: int = 100,
     status: Optional[str] = None,
+    firm_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_master_or_admin)
 ):
-    """List all vehicles (accessible to Master operations and Admin monitors)."""
-    vehicles = vehicle_service.get_vehicles(db, skip=skip, limit=limit, status=status)
+    """List all vehicles with optional status and firm filters."""
+    vehicles = vehicle_service.get_vehicles(db, skip=skip, limit=limit, status=status, firm_id=firm_id)
     return [populate_vehicle_response(v) for v in vehicles]
 
 @router.post("", response_model=VehicleResponse, status_code=status.HTTP_201_CREATED)
@@ -30,7 +35,7 @@ def create_vehicle(
     db: Session = Depends(get_db),
     master: User = Depends(get_current_master)
 ):
-    """Master endpoint to register a new vehicle."""
+    """Master endpoint to register a new vehicle under a compulsory firm."""
     vehicle = vehicle_service.create_vehicle(db, data, master.id)
     return populate_vehicle_response(vehicle)
 

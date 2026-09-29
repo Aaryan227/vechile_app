@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from app.db.session import Base
 
@@ -9,6 +9,7 @@ class Vehicle(Base):
     id = Column(Integer, primary_key=True, index=True)
     vehicle_number = Column(String(50), unique=True, index=True, nullable=False)
     vehicle_class = Column(String(50), nullable=False, default="Tanker")
+    firm_id = Column(Integer, ForeignKey("firms.id", ondelete="SET NULL"), nullable=True, index=True)
     make = Column(String(50), nullable=True)
     model = Column(String(50), nullable=True)
     manufacture_year = Column(Integer, nullable=True)
@@ -18,6 +19,7 @@ class Vehicle(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
+    firm = relationship("Firm", back_populates="vehicles")
     assignments = relationship("VehicleAssignment", back_populates="vehicle", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="vehicle", cascade="all, delete-orphan")
     tanker_reports = relationship("TankerDailyReport", back_populates="vehicle", cascade="all, delete-orphan")
@@ -25,3 +27,5 @@ class Vehicle(Base):
     government_charges = relationship("VehicleGovernmentCharge", back_populates="vehicle", cascade="all, delete-orphan")
     challans = relationship("VehicleChallan", back_populates="vehicle", cascade="all, delete-orphan")
     fastag = relationship("VehicleFASTag", back_populates="vehicle", uselist=False, cascade="all, delete-orphan")
+    expenses = relationship("VehicleExpense", back_populates="vehicle", cascade="all, delete-orphan")
+

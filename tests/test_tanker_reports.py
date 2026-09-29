@@ -1,8 +1,13 @@
 def test_create_tanker_report_and_auto_calculate(client, master_headers, admin_headers):
-    # Create a vehicle first as Master
+    # Create firm first
+    f_res = client.post("/api/v1/firms", headers=master_headers, json={"name": "Tanker Test Firm"})
+    firm_id = f_res.json()["id"]
+
+    # Create a vehicle under the firm
     v_res = client.post("/api/v1/vehicles", headers=master_headers, json={
         "vehicle_number": "MH04TR1234",
-        "vehicle_class": "Tanker"
+        "vehicle_class": "Tanker",
+        "firm_id": firm_id
     })
     assert v_res.status_code == 201
     vehicle_id = v_res.json()["id"]
@@ -43,4 +48,3 @@ def test_export_tanker_reports_excel(client, master_headers, admin_headers):
 
     m_response = client.get("/api/v1/tanker-reports/export", headers=master_headers)
     assert m_response.status_code == 200
-

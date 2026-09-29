@@ -3,7 +3,10 @@ const API_BASE = '/api/v1';
 let state = {
   token: localStorage.getItem('access_token') || null,
   user: null,
-  vehicles: []
+  vehicles: [],
+  firms: [],
+  routePoints: [],
+  financialsPreset: 'this_month'
 };
 
 const DOCUMENT_TYPE_LABELS = {
@@ -44,6 +47,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const todayStr = new Date().toISOString().split('T')[0];
   const dateInput = document.getElementById('tanker-date');
   if (dateInput) dateInput.value = todayStr;
+
+  const expDateInput = document.getElementById('exp-date');
+  if (expDateInput) expDateInput.value = todayStr;
+
+  // Initialize Financials date range preset
+  setFinancialPreset('this_month', false);
 
   if (state.token) {
     fetchCurrentUser();
@@ -207,6 +216,7 @@ async function fetchCurrentUser() {
 
     state.user = await res.json();
     updateUserUI();
+    await Promise.all([loadFirms(), loadRoutePoints()]);
     if (state.user.role === 'admin') {
       switchTab('dashboard');
     } else {
@@ -240,6 +250,8 @@ function updateUserUI() {
     userRoleBadge.className = isMaster ? 'badge badge-primary' : 'badge badge-warning';
 
     const navDashboard = document.getElementById('nav-item-dashboard');
+    const btnManageFirms = document.getElementById('btn-manage-firms');
+    const btnToggleAddExpense = document.getElementById('btn-toggle-add-expense');
     const btnAddTax = document.getElementById('btn-add-tax-toggle');
     const btnExportTax = document.getElementById('btn-export-tax-excel');
     const btnAddCharge = document.getElementById('btn-add-charge-toggle');
@@ -253,7 +265,9 @@ function updateUserUI() {
     if (btnExportTax) btnExportTax.style.display = 'inline-flex';
 
     if (isMaster) {
+      if (btnManageFirms) btnManageFirms.style.display = 'inline-flex';
       if (btnAddVehicle) btnAddVehicle.style.display = 'inline-flex';
+      if (btnToggleAddExpense) btnToggleAddExpense.style.display = 'inline-flex';
       if (btnAddTax) btnAddTax.style.display = 'inline-flex';
       if (btnAddCharge) btnAddCharge.style.display = 'inline-flex';
       if (btnAddChallan) btnAddChallan.style.display = 'inline-flex';
@@ -263,7 +277,9 @@ function updateUserUI() {
       if (cardTankerForm) cardTankerForm.style.display = 'block';
     } else {
       // Admin: Monitor & Approver Mode
+      if (btnManageFirms) btnManageFirms.style.display = 'none';
       if (btnAddVehicle) btnAddVehicle.style.display = 'none';
+      if (btnToggleAddExpense) btnToggleAddExpense.style.display = 'none';
       if (btnAddTax) btnAddTax.style.display = 'none';
       if (btnAddCharge) btnAddCharge.style.display = 'none';
       if (btnAddChallan) btnAddChallan.style.display = 'none';
@@ -300,10 +316,11 @@ function switchTab(tabId) {
   showSection(tabId);
 
   if (tabId === 'dashboard') loadDashboardMetrics();
-  if (tabId === 'vehicles') loadVehicles();
+  if (tabId === 'vehicles') { loadFirms(); loadVehicles(); }
   if (tabId === 'documents') loadDocuments();
   if (tabId === 'taxes') loadTaxes();
-  if (tabId === 'tanker-reports') loadTankerReports();
+  if (tabId === 'tanker-reports') { loadRoutePoints(); loadTankerReports(); }
+  if (tabId === 'financials') { loadFirms(); loadFinancials(); }
 }
 
 function showSection(sectionId) {
@@ -362,7 +379,13 @@ async function loadDashboardMetrics() {
 // Vehicle Management
 async function loadVehicles() {
   try {
-    const res = await fetch(`${API_BASE}/vehicles`, {
+    const firmFilter = document.getElementById('filter-vehicle-firm');
+    const firmId = firmFilter ? firmFilter.value : '';
+    let url = `${API_BASE}/vehicles`;
+    if (firmId) {
+      url += `?firm_id=${firmId}`;
+    }
+    const res = await fetch(url, {
       headers: { 'Authorization': `Bearer ${state.token}` }
     });
     if (!res.ok) return;
@@ -371,7 +394,7 @@ async function loadVehicles() {
     renderVehiclesTable();
     populateVehicleDropdowns();
   } catch (err) {
-    console.error(err);
+    console.error('Failed to load vehicles', err);
   }
 }
 
@@ -379,14 +402,15 @@ function renderVehiclesTable() {
   const tbody = document.getElementById('tbody-vehicles');
   const isMaster = state.user && state.user.role === 'master';
 
-  if (state.vehicles.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--color-text-muted);">No vehicles recorded yet. ${isMaster ? "Click '+ Add Vehicle' to start." : ''}</td></tr>`;
+  if (!state.vehicles || state.vehicles.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--color-text-muted);">No vehicles recorded yet. ${isMaster ? "Click '+ Add Vehicle' to start." : ''}</td></tr>`;
     return;
   }
 
   tbody.innerHTML = state.vehicles.map(v => `
     <tr>
       <td><strong>${v.vehicle_number}</strong></td>
+      <td><span class="badge badge-info">${v.firm_name || 'N/A'}</span></td>
       <td>${v.vehicle_class}</td>
       <td>${v.make || ''} ${v.model || ''}</td>
       <td>${v.chassis_number || 'N/A'}</td>
@@ -406,29 +430,69 @@ function populateVehicleDropdowns() {
   const docSelect = document.getElementById('doc-vehicle-id');
   const tankerSelect = document.getElementById('tanker-vehicle-id');
   const taxSelect = document.getElementById('tax-vehicle-id');
+  const expSelect = document.getElementById('exp-vehicle-id');
+  const finFilterVehicle = document.getElementById('fin-filter-vehicle');
 
   const optionsHTML = `<option value="">-- Choose Vehicle --</option>` +
-    state.vehicles.map(v => `<option value="${v.id}">${v.vehicle_number} (${v.vehicle_class})</option>`).join('');
+    state.vehicles.map(v => `<option value="${v.id}">${v.vehicle_number} (${v.firm_name || v.vehicle_class})</option>`).join('');
 
-  if (docSelect) docSelect.innerHTML = optionsHTML;
-  if (tankerSelect) tankerSelect.innerHTML = optionsHTML;
-  if (taxSelect) taxSelect.innerHTML = optionsHTML;
+  if (docSelect) {
+    const prev = docSelect.value;
+    docSelect.innerHTML = optionsHTML;
+    if (prev) docSelect.value = prev;
+  }
+  if (tankerSelect) {
+    const prev = tankerSelect.value;
+    tankerSelect.innerHTML = optionsHTML;
+    if (prev) tankerSelect.value = prev;
+  }
+  if (taxSelect) {
+    const prev = taxSelect.value;
+    taxSelect.innerHTML = optionsHTML;
+    if (prev) taxSelect.value = prev;
+  }
+  if (expSelect) {
+    const prev = expSelect.value;
+    expSelect.innerHTML = optionsHTML;
+    if (prev) expSelect.value = prev;
+  }
+  if (finFilterVehicle) {
+    const currentVal = finFilterVehicle.value;
+    finFilterVehicle.innerHTML = `<option value="">All Vehicles</option>` +
+      state.vehicles.map(v => `<option value="${v.id}">${v.vehicle_number} (${v.firm_name || v.vehicle_class})</option>`).join('');
+    finFilterVehicle.value = currentVal;
+  }
 }
 
 function toggleAddVehicleForm() {
   const form = document.getElementById('card-add-vehicle');
-  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  if (!form) return;
+  const isHidden = form.style.display === 'none';
+  form.style.display = isHidden ? 'block' : 'none';
+
+  if (isHidden) {
+    populateFirmDropdowns();
+  }
 }
 
 async function handleCreateVehicle(e) {
   e.preventDefault();
+  const firmSelect = document.getElementById('veh-firm-id');
+  const firmId = firmSelect ? parseInt(firmSelect.value) : NaN;
+
+  if (!firmId || isNaN(firmId)) {
+    showToast('Firm selection is compulsory. Please select or register a firm first.', 'error');
+    return;
+  }
+
   const payload = {
-    vehicle_number: document.getElementById('veh-number').value,
+    firm_id: firmId,
+    vehicle_number: document.getElementById('veh-number').value.trim().toUpperCase(),
     vehicle_class: document.getElementById('veh-class').value,
-    make: document.getElementById('veh-make').value,
-    model: document.getElementById('veh-model').value,
-    chassis_number: document.getElementById('veh-chassis').value,
-    engine_number: document.getElementById('veh-engine').value,
+    make: document.getElementById('veh-make').value.trim(),
+    model: document.getElementById('veh-model').value.trim(),
+    chassis_number: document.getElementById('veh-chassis').value.trim(),
+    engine_number: document.getElementById('veh-engine').value.trim(),
     status: 'ACTIVE'
   };
 
@@ -450,7 +514,30 @@ async function handleCreateVehicle(e) {
     showToast('Vehicle registered successfully', 'success');
     document.getElementById('form-add-vehicle').reset();
     toggleAddVehicleForm();
-    loadVehicles();
+    await loadVehicles();
+    await loadFirms(); // refresh vehicle count in firm management
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handleDeleteVehicle(vehicleId) {
+  if (!confirm('Are you sure you want to delete this vehicle? All linked documents, taxes, and logs will be removed.')) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/vehicles/${vehicleId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to delete vehicle');
+    }
+
+    showToast('Vehicle deleted successfully', 'info');
+    await loadVehicles();
+    await loadFirms();
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -752,6 +839,29 @@ function calculateFreightAndHSD() {
   document.getElementById('tanker-hsd-amount').value = hsdAmount;
 }
 
+function handleLoadingPointChange(val) {
+  if (!val) return;
+
+  const point = (state.routePoints || []).find(p => (p.point_name === val || p.name === val));
+  if (!point) return;
+
+  const rtkmInput = document.getElementById('tanker-rtkm');
+  const rateInput = document.getElementById('tanker-rate');
+  const pumpInput = document.getElementById('tanker-pump');
+
+  if (rtkmInput) rtkmInput.value = point.default_rtkm;
+  if (rateInput && point.default_rate !== null && point.default_rate !== undefined) {
+    rateInput.value = point.default_rate;
+  }
+  if (pumpInput && point.pump_station) {
+    pumpInput.value = point.pump_station;
+  }
+
+  // Recalculate freight and HSD immediately
+  calculateFreightAndHSD();
+  showToast(`Auto-fetched RTKM: ${point.default_rtkm} km`, 'info');
+}
+
 async function handleCreateTankerReport(e) {
   e.preventDefault();
   const payload = {
@@ -786,7 +896,8 @@ async function handleCreateTankerReport(e) {
     showToast('Tanker report entry saved!', 'success');
     document.getElementById('form-tanker-report').reset();
     document.getElementById('tanker-date').value = new Date().toISOString().split('T')[0];
-    loadTankerReports();
+    await loadTankerReports();
+    await loadRoutePoints();
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -833,13 +944,6 @@ function renderTankerReportsTable(reports) {
       <td>₹${r.khuraki.toLocaleString()}</td>
     </tr>
   `).join('');
-}
-
-function handleExportExcel() {
-  const month = document.getElementById('filter-month').value;
-  let url = `${API_BASE}/tanker-reports/export`;
-  if (month) url += `?month=${month}`;
-  window.open(url, '_blank');
 }
 
 // Change Password Modal Handlers
@@ -1538,3 +1642,635 @@ async function handleExportExcel() {
     showToast(err.message, 'error');
   }
 }
+
+// ==========================================
+// Firm Management Module
+// ==========================================
+async function loadFirms() {
+  try {
+    const res = await fetch(`${API_BASE}/firms`, {
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+    if (!res.ok) return;
+
+    state.firms = await res.json();
+    populateFirmDropdowns();
+    renderFirmsTable();
+  } catch (err) {
+    console.error('Failed to load firms', err);
+  }
+}
+
+function populateFirmDropdowns() {
+  const vehFirmSelect = document.getElementById('veh-firm-id');
+  const filterVehFirm = document.getElementById('filter-vehicle-firm');
+  const filterFinFirm = document.getElementById('fin-filter-firm');
+  const alertNoFirms = document.getElementById('alert-no-firms');
+  const btnSubmitVehicle = document.getElementById('btn-submit-vehicle');
+
+  const hasFirms = state.firms && state.firms.length > 0;
+
+  if (alertNoFirms) {
+    alertNoFirms.style.display = hasFirms ? 'none' : 'block';
+  }
+  if (btnSubmitVehicle) {
+    btnSubmitVehicle.disabled = !hasFirms;
+    if (!hasFirms) {
+      btnSubmitVehicle.title = 'Please register a firm first before adding vehicles';
+    } else {
+      btnSubmitVehicle.title = '';
+    }
+  }
+
+  const optionsHTML = `<option value="">-- Choose Firm (Compulsory) --</option>` +
+    (state.firms || []).map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+
+  if (vehFirmSelect) {
+    const prev = vehFirmSelect.value;
+    vehFirmSelect.innerHTML = optionsHTML;
+    if (prev) vehFirmSelect.value = prev;
+  }
+
+  const filterOptionsHTML = `<option value="">All Firms</option>` +
+    (state.firms || []).map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+
+  if (filterVehFirm) {
+    const prev = filterVehFirm.value;
+    filterVehFirm.innerHTML = filterOptionsHTML;
+    if (prev) filterVehFirm.value = prev;
+  }
+
+  if (filterFinFirm) {
+    const prev = filterFinFirm.value;
+    filterFinFirm.innerHTML = filterOptionsHTML;
+    if (prev) filterFinFirm.value = prev;
+  }
+}
+
+function renderFirmsTable() {
+  const tbody = document.getElementById('tbody-firms-list');
+  if (!tbody) return;
+
+  if (!state.firms || state.firms.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--color-warning);">No firms registered yet. Add your first firm above!</td></tr>`;
+    return;
+  }
+
+  const isMaster = state.user && state.user.role === 'master';
+  tbody.innerHTML = state.firms.map(f => `
+    <tr>
+      <td><strong>${f.name}</strong></td>
+      <td>${f.registration_number || '-'}</td>
+      <td><span class="badge badge-info">${f.vehicle_count || 0} vehicles</span></td>
+      <td>
+        ${isMaster ? `<button class="btn btn-danger btn-sm" onclick="handleDeleteFirm(${f.id})">Delete</button>` : '-'}
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openFirmsModal() {
+  const modal = document.getElementById('modal-firms');
+  if (modal) {
+    modal.classList.add('active');
+    loadFirms();
+  }
+}
+
+function closeFirmsModal() {
+  const modal = document.getElementById('modal-firms');
+  if (modal) modal.classList.remove('active');
+  const form = document.getElementById('form-create-firm');
+  if (form) form.reset();
+}
+
+async function handleCreateFirmSubmit(e) {
+  e.preventDefault();
+  const name = document.getElementById('firm-name').value.trim();
+  const registration_number = document.getElementById('firm-reg-no').value.trim() || null;
+  const contact_person = document.getElementById('firm-contact').value.trim() || null;
+  const phone = document.getElementById('firm-phone').value.trim() || null;
+
+  try {
+    const res = await fetch(`${API_BASE}/firms`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.token}`
+      },
+      body: JSON.stringify({ name, registration_number, contact_person, phone })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to create firm');
+    }
+
+    showToast(`Firm "${name}" registered successfully!`, 'success');
+    document.getElementById('form-create-firm').reset();
+    await loadFirms();
+    await loadVehicles();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handleDeleteFirm(firmId) {
+  if (!confirm('Are you sure you want to delete this firm? This is only allowed if no vehicles are linked to it.')) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/firms/${firmId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to delete firm. Ensure no vehicles are linked.');
+    }
+
+    showToast('Firm deleted successfully', 'info');
+    await loadFirms();
+    await loadVehicles();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// ==========================================
+// Route & Loading Points (RTKM Auto-Fetch)
+// ==========================================
+async function loadRoutePoints() {
+  try {
+    const res = await fetch(`${API_BASE}/route-points`, {
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+    if (!res.ok) return;
+
+    state.routePoints = await res.json();
+    populateRoutePointDropdown();
+  } catch (err) {
+    console.error('Failed to load route points', err);
+  }
+}
+
+function populateRoutePointDropdown() {
+  const select = document.getElementById('tanker-ul-point');
+  if (!select) return;
+
+  const currentVal = select.value;
+  select.innerHTML = `<option value="">-- Select Loading / Unloading Point --</option>` +
+    (state.routePoints || []).map(p => {
+      const pName = p.point_name || p.name;
+      return `
+        <option value="${pName}" data-rtkm="${p.default_rtkm}" data-rate="${p.default_rate !== null && p.default_rate !== undefined ? p.default_rate : ''}" data-pump="${p.pump_station || ''}">
+          ${pName} (${p.default_rtkm} RTKM)
+        </option>
+      `;
+    }).join('');
+
+  if (currentVal) select.value = currentVal;
+}
+
+function openAddRoutePointModal() {
+  const modal = document.getElementById('modal-add-route-point');
+  if (modal) modal.classList.add('active');
+}
+
+function closeAddRoutePointModal() {
+  const modal = document.getElementById('modal-add-route-point');
+  if (modal) modal.classList.remove('active');
+  const form = document.getElementById('form-add-route-point');
+  if (form) form.reset();
+}
+
+async function handleCreateRoutePointSubmit(e) {
+  e.preventDefault();
+  const point_name = document.getElementById('point-name').value.trim();
+  const point_type = document.getElementById('point-type').value;
+  const default_rtkm = parseFloat(document.getElementById('point-default-rtkm').value);
+  const rawRate = document.getElementById('point-default-rate').value;
+  const default_rate = rawRate ? parseFloat(rawRate) : null;
+  const pump_station = document.getElementById('point-pump-station').value.trim() || null;
+
+  try {
+    const res = await fetch(`${API_BASE}/route-points`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.token}`
+      },
+      body: JSON.stringify({
+        name: point_name,
+        point_name: point_name,
+        point_type,
+        default_rtkm,
+        default_rate,
+        pump_station
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to save route point');
+    }
+
+    const created = await res.json();
+    const createdName = created.point_name || created.name;
+    showToast(`Route point "${createdName}" saved!`, 'success');
+    closeAddRoutePointModal();
+    await loadRoutePoints();
+
+    // Auto-select in tanker form and trigger auto-fetch
+    const select = document.getElementById('tanker-ul-point');
+    if (select) {
+      select.value = createdName;
+      handleLoadingPointChange(createdName);
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// ==========================================
+// Financial Log Book & Profit / Loss Module
+// ==========================================
+
+function setFinancialPreset(preset, fetchAfter = true) {
+  state.financialsPreset = preset;
+  document.querySelectorAll('.btn-preset').forEach(btn => {
+    if (btn.id === `btn-preset-${preset}`) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+
+  const now = new Date();
+  let fromStr = '';
+  let toStr = '';
+
+  const formatYMD = (d) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  if (preset === 'today') {
+    fromStr = formatYMD(now);
+    toStr = formatYMD(now);
+  } else if (preset === 'this_week') {
+    const currentDay = now.getDay(); // 0 is Sunday
+    const distanceToMonday = (currentDay + 6) % 7;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - distanceToMonday);
+    fromStr = formatYMD(monday);
+    toStr = formatYMD(now);
+  } else if (preset === 'this_month') {
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    fromStr = formatYMD(firstDay);
+    toStr = formatYMD(now);
+  } else if (preset === 'last_month') {
+    const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    fromStr = formatYMD(firstDayLastMonth);
+    toStr = formatYMD(lastDayLastMonth);
+  } else if (preset === 'fy') {
+    // Indian FY: April 1 to March 31
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth(); // 0-indexed, 3 is April
+    const fyStartYear = currentMonth >= 3 ? currentYear : currentYear - 1;
+    const fyStart = new Date(fyStartYear, 3, 1);
+    const fyEnd = new Date(fyStartYear + 1, 2, 31);
+    fromStr = formatYMD(fyStart);
+    toStr = formatYMD(fyEnd);
+  } else if (preset === 'all') {
+    fromStr = '';
+    toStr = '';
+  }
+
+  const fromInput = document.getElementById('fin-date-from');
+  const toInput = document.getElementById('fin-date-to');
+  if (fromInput) fromInput.value = fromStr;
+  if (toInput) toInput.value = toStr;
+
+  if (fetchAfter) {
+    loadFinancials();
+  }
+}
+
+function handleFinancialDateChange() {
+  document.querySelectorAll('.btn-preset').forEach(b => b.classList.remove('active'));
+  state.financialsPreset = 'custom';
+  loadFinancials();
+}
+
+async function loadFinancials() {
+  try {
+    const fromInput = document.getElementById('fin-date-from');
+    const toInput = document.getElementById('fin-date-to');
+    const vehInput = document.getElementById('fin-filter-vehicle');
+    const firmInput = document.getElementById('fin-filter-firm');
+
+    const dateFrom = fromInput ? fromInput.value : '';
+    const dateTo = toInput ? toInput.value : '';
+    const vehicleId = vehInput ? vehInput.value : '';
+    const firmId = firmInput ? firmInput.value : '';
+
+    const params = new URLSearchParams();
+    if (dateFrom) params.append('date_from', dateFrom);
+    if (dateTo) params.append('date_to', dateTo);
+    if (vehicleId) params.append('vehicle_id', vehicleId);
+    if (firmId) params.append('firm_id', firmId);
+
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+
+    // Parallel fetch profit-loss summary and log-book entries
+    const [resPL, resLB] = await Promise.all([
+      fetch(`${API_BASE}/financials/profit-loss${queryString}`, {
+        headers: { 'Authorization': `Bearer ${state.token}` }
+      }),
+      fetch(`${API_BASE}/financials/log-book${queryString}`, {
+        headers: { 'Authorization': `Bearer ${state.token}` }
+      })
+    ]);
+
+    if (!resPL.ok || !resLB.ok) {
+      console.error('Failed to load financial records');
+      return;
+    }
+
+    const plData = await resPL.json();
+    const lbData = await resLB.json();
+
+    renderFinancialMetrics(plData);
+    renderLogBookLedger(lbData.entries || []);
+  } catch (err) {
+    console.error('loadFinancials error:', err);
+  }
+}
+
+function renderFinancialMetrics(data) {
+  const elIncome = document.getElementById('fin-total-income');
+  const elTrips = document.getElementById('fin-trips-count');
+  const elExp = document.getElementById('fin-total-expenditure');
+  const elNetProfit = document.getElementById('fin-net-profit');
+  const elProfitStatus = document.getElementById('fin-profit-status');
+  const elMargin = document.getElementById('fin-profit-margin');
+  const elRtkm = document.getElementById('fin-rtkm-count');
+  const cardProfit = document.getElementById('fin-card-profit');
+
+  if (elIncome) elIncome.innerText = `₹${Number(data.total_income || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (elTrips) elTrips.innerText = `${data.total_trips || 0} Trips Logged`;
+  if (elExp) elExp.innerText = `₹${Number(data.total_expenditure || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const net = Number(data.net_profit || 0);
+  const netFmt = `₹${Math.abs(net).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (elNetProfit) {
+    elNetProfit.innerText = net < 0 ? `- ${netFmt}` : netFmt;
+    elNetProfit.className = net >= 0 ? 'metric-value fin-profit' : 'metric-value fin-loss';
+  }
+
+  if (cardProfit) {
+    if (net >= 0) {
+      cardProfit.style.borderColor = 'var(--color-success)';
+      if (elProfitStatus) {
+        elProfitStatus.innerText = '✓ Net Profitable Operation';
+        elProfitStatus.style.color = 'var(--color-success)';
+      }
+    } else {
+      cardProfit.style.borderColor = 'var(--color-error)';
+      if (elProfitStatus) {
+        elProfitStatus.innerText = '⚠ Operating at Net Loss';
+        elProfitStatus.style.color = 'var(--color-error)';
+      }
+    }
+  }
+
+  if (elMargin) elMargin.innerText = `${data.profit_margin_percent || 0}%`;
+  if (elRtkm) elRtkm.innerText = `${Number(data.total_rtkm || 0).toLocaleString('en-IN')} RTKM Covered`;
+
+  // Render 8 categories breakdown pills
+  const catBreakdown = data.category_breakdown || {};
+  const categories = ['tyre', 'battery', 'maintenance', 'salary', 'khuraki', 'toll', 'road_tax', 'others'];
+  categories.forEach(cat => {
+    const el = document.getElementById(`cat-amt-${cat}`);
+    if (el) {
+      const amt = Number(catBreakdown[cat] || 0);
+      el.innerText = `₹${amt.toLocaleString('en-IN', { minimumFractionDigits: amt % 1 !== 0 ? 2 : 0 })}`;
+    }
+  });
+}
+
+function renderLogBookLedger(entries) {
+  const tbody = document.getElementById('tbody-log-book');
+  const countSpan = document.getElementById('fin-ledger-count');
+  if (!tbody) return;
+
+  if (countSpan) countSpan.innerText = `Showing ${entries.length} chronological entries`;
+
+  if (entries.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--color-text-muted);">No financial transactions recorded for this period.</td></tr>`;
+    return;
+  }
+
+  const isMaster = state.user && state.user.role === 'master';
+
+  tbody.innerHTML = entries.map(item => {
+    const isIncome = item.entry_type === 'INCOME';
+    const typeBadge = isIncome
+      ? `<span class="badge badge-success">Income (Freight)</span>`
+      : `<span class="badge badge-warning">Expenditure</span>`;
+
+    const itemAmt = item.amount !== undefined ? item.amount : (isIncome ? item.income_amount : item.expense_amount);
+    const amtFormatted = `₹${Number(itemAmt || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+    const incomeStr = isIncome ? amtFormatted : '-';
+    const expenseStr = !isIncome ? amtFormatted : '-';
+
+    const actionBtn = (!isIncome && isMaster && item.reference_id)
+      ? `<button class="btn btn-secondary btn-sm" style="color: var(--color-error);" onclick="handleDeleteExpense(${item.reference_id})">Delete</button>`
+      : '-';
+
+    return `
+      <tr>
+        <td>${item.entry_date}</td>
+        <td><strong>${item.vehicle_number || '#' + item.vehicle_id}</strong></td>
+        <td>${item.firm_name || '-'}</td>
+        <td>${typeBadge}</td>
+        <td><span class="badge badge-info">${item.category.toUpperCase().replace(/_/g, ' ')}</span></td>
+        <td>${item.description || '-'}</td>
+        <td style="text-align: right; color: var(--color-success); font-weight: 600;">${incomeStr}</td>
+        <td style="text-align: right; color: var(--color-error); font-weight: 600;">${expenseStr}</td>
+        <td>${actionBtn}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function toggleAddExpenseForm() {
+  const card = document.getElementById('card-add-expense');
+  if (!card) return;
+
+  const isHidden = card.style.display === 'none';
+  card.style.display = isHidden ? 'block' : 'none';
+
+  if (isHidden) {
+    const dateInput = document.getElementById('exp-date');
+    if (dateInput && !dateInput.value) {
+      dateInput.value = new Date().toISOString().split('T')[0];
+    }
+    // Pre-populate vehicle if selected in filter
+    const finFilterVehicle = document.getElementById('fin-filter-vehicle');
+    const expVehicle = document.getElementById('exp-vehicle-id');
+    if (finFilterVehicle && finFilterVehicle.value && expVehicle) {
+      expVehicle.value = finFilterVehicle.value;
+      populateExpenseTrips(finFilterVehicle.value);
+    }
+  }
+}
+
+async function populateExpenseTrips(vehicleId) {
+  const tripSelect = document.getElementById('exp-trip-id');
+  if (!tripSelect) return;
+
+  if (!vehicleId) {
+    tripSelect.innerHTML = `<option value="">-- No specific trip link --</option>`;
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/tanker-reports?vehicle_id=${vehicleId}`, {
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+    if (!res.ok) return;
+
+    const trips = await res.json();
+    tripSelect.innerHTML = `<option value="">-- No specific trip link --</option>` +
+      trips.map(t => `<option value="${t.id}">${t.report_date} – ${t.ul_point} (₹${t.freight})</option>`).join('');
+  } catch (err) {
+    console.error('Failed to populate trips for vehicle', err);
+  }
+}
+
+async function handleCreateExpense(e) {
+  e.preventDefault();
+  const vehicle_id = parseInt(document.getElementById('exp-vehicle-id').value);
+  const expense_date = document.getElementById('exp-date').value;
+  const category = document.getElementById('exp-category').value;
+  const amount = parseFloat(document.getElementById('exp-amount').value);
+  const trip_id_val = document.getElementById('exp-trip-id').value;
+  const trip_id = trip_id_val ? parseInt(trip_id_val) : null;
+  const vendor = document.getElementById('exp-vendor').value.trim() || null;
+  const description = document.getElementById('exp-desc').value.trim() || null;
+
+  if (!vehicle_id || isNaN(vehicle_id)) {
+    showToast('Please select a vehicle', 'error');
+    return;
+  }
+  if (!amount || amount <= 0) {
+    showToast('Please enter a valid expense amount', 'error');
+    return;
+  }
+
+  const payload = {
+    vehicle_id,
+    expense_date,
+    category,
+    amount,
+    trip_id,
+    vendor,
+    description
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/expenses`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.token}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to record expense');
+    }
+
+    showToast('Expense recorded successfully!', 'success');
+    document.getElementById('form-add-expense').reset();
+    toggleAddExpenseForm();
+    await loadFinancials();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handleDeleteExpense(expenseId) {
+  if (!confirm('Are you sure you want to delete this expenditure entry?')) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/expenses/${expenseId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to delete expense entry');
+    }
+
+    showToast('Expenditure entry deleted', 'info');
+    await loadFinancials();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handleExportFinancialsExcel() {
+  try {
+    showToast('Generating Financial Log Book & P&L Excel report...', 'info');
+
+    const fromInput = document.getElementById('fin-date-from');
+    const toInput = document.getElementById('fin-date-to');
+    const vehInput = document.getElementById('fin-filter-vehicle');
+    const firmInput = document.getElementById('fin-filter-firm');
+
+    const dateFrom = fromInput ? fromInput.value : '';
+    const dateTo = toInput ? toInput.value : '';
+    const vehicleId = vehInput ? vehInput.value : '';
+    const firmId = firmInput ? firmInput.value : '';
+
+    const params = new URLSearchParams();
+    if (dateFrom) params.append('date_from', dateFrom);
+    if (dateTo) params.append('date_to', dateTo);
+    if (vehicleId) params.append('vehicle_id', vehicleId);
+    if (firmId) params.append('firm_id', firmId);
+
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+
+    const res = await fetch(`${API_BASE}/financials/export${queryString}`, {
+      headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to export financial log book');
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `VahaanSetu_Financial_LogBook_${dateFrom || 'all'}_to_${dateTo || 'all'}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+    showToast('Excel report downloaded successfully!', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+

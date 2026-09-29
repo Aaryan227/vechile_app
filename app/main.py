@@ -19,12 +19,18 @@ from app.routers import (
     tanker_reports_router,
     admin_router,
     reports_router,
-    taxes_router
+    taxes_router,
+    firms_router,
+    route_points_router,
+    expenses_router,
+    financials_router
 )
 from app.db.models.user import User, UserRole
+from app.db.models.firm import Firm
 from app.db.models.vehicle import Vehicle
-from app.db.models.vehicle_assignment import VehicleAssignment
+from app.db.models.route_point import RoutePoint
 from app.core.security import get_password_hash
+from sqlalchemy import text
 
 def seed_initial_data():
     db = SessionLocal()
@@ -71,12 +77,28 @@ def seed_initial_data():
             db.commit()
             db.refresh(admin)
 
+        # Ensure default firm exists
+        default_firm = db.query(Firm).first()
+        if not default_firm:
+            default_firm = Firm(
+                name="Kings Petroleum",
+                registration_number="27ABCDE1234F1Z5",
+                contact_person="Master Manager",
+                phone="9800000001",
+                is_active=True,
+                created_by=master.id if master else None
+            )
+            db.add(default_firm)
+            db.commit()
+            db.refresh(default_firm)
+
         # Check if sample vehicle exists
         vehicle = db.query(Vehicle).filter(Vehicle.vehicle_number == "MH12AB1234").first()
         if not vehicle:
             vehicle = Vehicle(
                 vehicle_number="MH12AB1234",
                 vehicle_class="Tanker",
+                firm_id=default_firm.id,
                 make="Tata Motors",
                 model="LPT 3518",
                 manufacture_year=2022,
@@ -87,16 +109,37 @@ def seed_initial_data():
             db.add(vehicle)
             db.commit()
             db.refresh(vehicle)
+        elif vehicle.firm_id is None:
+            vehicle.firm_id = default_firm.id
+            db.commit()
+
+        # Update any vehicles without firm_id to default_firm
+        try:
+            db.execute(text(f"UPDATE vehicles SET firm_id = {default_firm.id} WHERE firm_id IS NULL"))
+            db.commit()
+        except Exception:
+            pass
+
+        # Seed sample route points if none exist
+        if db.query(RoutePoint).count() == 0:
+            sample_points = [
+                RoutePoint(name="Pakuria KSK", point_type="UNLOADING", default_rtkm=265.6, default_rate=3.559476, pump_station="Pakuria KSK"),
+                RoutePoint(name="Budge Budge Terminal", point_type="LOADING", default_rtkm=180.0, default_rate=3.559476, pump_station="Budge Budge HPCL"),
+                RoutePoint(name="Haldia Depot", point_type="LOADING", default_rtkm=320.0, default_rate=3.559476, pump_station="Haldia IOCL"),
+                RoutePoint(name="Mogra Tank Farm", point_type="UNLOADING", default_rtkm=145.2, default_rate=3.559476, pump_station="Mogra IOCL")
+            ]
+            db.add_all(sample_points)
+            db.commit()
+
     except Exception as e:
+        logger.error(f"Seed error: {e}", exc_info=True)
         db.rollback()
     finally:
         db.close()
 
-from sqlalchemy import text
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: ensure PostgreSQL compatibility & create tables
+    # Startup: ensure PostgreSQL & SQLite compatibility & create tables
     try:
         with engine.connect() as conn:
             if engine.dialect.name == "postgresql":
@@ -132,6 +175,17 @@ async def lifespan(app: FastAPI):
                         except Exception:
                             pass
                     conn.execute(text("ALTER TABLE vehicle_tax_records ALTER COLUMN tax_type TYPE VARCHAR(50) USING tax_type::text"))
+                    conn.commit()
+                except Exception:
+                    pass
+                try:
+                    conn.execute(text("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS firm_id INTEGER REFERENCES firms(id)"))
+                    conn.commit()
+                except Exception:
+                    pass
+            elif engine.dialect.name == "sqlite":
+                try:
+                    conn.execute(text("ALTER TABLE vehicles ADD COLUMN firm_id INTEGER REFERENCES firms(id)"))
                     conn.commit()
                 except Exception:
                     pass
@@ -183,6 +237,10 @@ app.include_router(tanker_reports_router, prefix=settings.API_V1_STR)
 app.include_router(admin_router, prefix=settings.API_V1_STR)
 app.include_router(reports_router, prefix=settings.API_V1_STR)
 app.include_router(taxes_router, prefix=settings.API_V1_STR)
+app.include_router(firms_router, prefix=settings.API_V1_STR)
+app.include_router(route_points_router, prefix=settings.API_V1_STR)
+app.include_router(expenses_router, prefix=settings.API_V1_STR)
+app.include_router(financials_router, prefix=settings.API_V1_STR)
 
 # Serve Web Frontend static files
 static_dir = os.path.join(os.path.dirname(__file__), "..", "static")

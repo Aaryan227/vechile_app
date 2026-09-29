@@ -30,6 +30,7 @@
         <li id="nav-item-documents"><a class="nav-link" data-tab="documents" onclick="switchTab('documents')">Documents</a></li>
         <li id="nav-item-taxes"><a class="nav-link" data-tab="taxes" onclick="switchTab('taxes')">Tax & Charges</a></li>
         <li id="nav-item-tanker-reports"><a class="nav-link" data-tab="tanker-reports" onclick="switchTab('tanker-reports')">Tanker Reports</a></li>
+        <li id="nav-item-financials"><a class="nav-link" data-tab="financials" onclick="switchTab('financials')">Log Book & P&L</a></li>
       </ul>
 
       <div id="user-section" style="display: flex; align-items: center; gap: 0.75rem;">
@@ -207,16 +208,33 @@
         <div class="section-header">
           <div>
             <h1 class="section-title">Fleet Vehicles</h1>
-            <p class="section-subtitle">Manage vehicle records, driver assignments & specifications</p>
+            <p class="section-subtitle">Manage vehicle records, firm ownership, and specifications</p>
           </div>
-          <button id="btn-add-vehicle-toggle" class="btn btn-primary" onclick="toggleAddVehicleForm()">+ Add Vehicle</button>
+          <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <button id="btn-manage-firms" class="btn btn-secondary" onclick="openFirmsModal()">🏢 Manage Firms</button>
+            <button id="btn-add-vehicle-toggle" class="btn btn-primary" onclick="toggleAddVehicleForm()">+ Add Vehicle</button>
+          </div>
         </div>
 
-        <!-- Add Vehicle Form (Admin) -->
+        <!-- Add Vehicle Form (Master) -->
         <div id="card-add-vehicle" class="card-form" style="display: none;">
           <h3 style="margin-bottom: 1rem; color: var(--color-primary);">Register New Logistics Vehicle</h3>
+
+          <!-- Warning banner if no firms exist -->
+          <div id="alert-no-firms" style="display: none; background-color: var(--color-warning-bg); border: 1px solid var(--color-warning); padding: 0.75rem 1rem; border-radius: var(--radius-sm); margin-bottom: 1rem; color: #92400e; font-size: 0.9rem;">
+            <strong>⚠ No Firm registered yet!</strong> The Master must add a Firm before registering any vehicle.
+            <button type="button" class="btn btn-primary btn-sm" style="margin-left: 0.75rem;" onclick="openFirmsModal()">+ Add Firm Now</button>
+          </div>
+
           <form id="form-add-vehicle" onsubmit="handleCreateVehicle(event)">
             <div class="form-grid">
+              <div class="form-group">
+                <label>Firm Name (Compulsory) *</label>
+                <select id="veh-firm-id" class="form-control" required>
+                  <option value="">-- Choose Firm (Compulsory) --</option>
+                </select>
+              </div>
+
               <div class="form-group">
                 <label>Vehicle Number *</label>
                 <input type="text" id="veh-number" class="form-control" placeholder="MH12AB1234" required>
@@ -253,18 +271,28 @@
             </div>
 
             <div style="margin-top: 1.25rem; display: flex; gap: 0.75rem;">
-              <button type="submit" class="btn btn-accent">Save Vehicle</button>
+              <button type="submit" id="btn-submit-vehicle" class="btn btn-accent">Save Vehicle</button>
               <button type="button" class="btn btn-secondary" onclick="toggleAddVehicleForm()">Cancel</button>
             </div>
           </form>
         </div>
 
-        <!-- Vehicle Table -->
+        <!-- Vehicle Table & Filters -->
+        <div style="margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <label style="font-size: 0.85rem; font-weight: 600; color: var(--color-primary);">Filter by Firm:</label>
+            <select id="filter-vehicle-firm" class="form-control" style="width: auto; padding: 0.35rem 0.75rem; font-size: 0.85rem;" onchange="loadVehicles()">
+              <option value="">All Firms</option>
+            </select>
+          </div>
+        </div>
+
         <div class="table-container">
           <table class="data-table">
             <thead>
               <tr>
                 <th>Vehicle Number</th>
+                <th>Firm Name</th>
                 <th>Class</th>
                 <th>Make & Model</th>
                 <th>Chassis No</th>
@@ -447,8 +475,13 @@
               </div>
 
               <div class="form-group">
-                <label>U/L Point (Unloading/Loading) *</label>
-                <input type="text" id="tanker-ul-point" class="form-control" placeholder="Pakuria KSK" required>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label>U/L Point (Loading/Unloading) *</label>
+                  <button type="button" class="btn btn-secondary btn-sm" style="padding: 0.15rem 0.5rem; font-size: 0.75rem;" onclick="openAddRoutePointModal()">+ Add Point</button>
+                </div>
+                <select id="tanker-ul-point" class="form-control" required onchange="handleLoadingPointChange(this.value)">
+                  <option value="">-- Select Loading / Unloading Point --</option>
+                </select>
               </div>
 
               <div class="form-group">
@@ -932,6 +965,222 @@
           </div>
         </div>
       </section>
+
+      <!-- 7. FINANCIAL LOG BOOK & PROFIT/LOSS SECTION -->
+      <section id="section-financials" class="section">
+        <div class="section-header">
+          <div>
+            <h1 class="section-title">Financial Log Book & Profit / Loss</h1>
+            <p class="section-subtitle">Real-time revenue, vehicle expenses & net profitability ledger</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <button id="btn-export-financials-excel" class="btn btn-primary" onclick="handleExportFinancialsExcel()">
+              📥 Export to Excel (.xlsx)
+            </button>
+            <button id="btn-toggle-add-expense" class="btn btn-accent" onclick="toggleAddExpenseForm()">
+              + Log Expense
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter & Date Range Toolbar -->
+        <div class="card-form" style="margin-bottom: 1.5rem; padding: 1rem 1.25rem;">
+          <div style="display: flex; flex-direction: column; gap: 1rem;">
+            <!-- Presets Row -->
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+              <span style="font-size: 0.85rem; font-weight: 700; color: var(--color-primary); margin-right: 0.25rem;">Quick Presets:</span>
+              <button type="button" class="btn-preset active" id="btn-preset-this_month" onclick="setFinancialPreset('this_month')">This Month</button>
+              <button type="button" class="btn-preset" id="btn-preset-today" onclick="setFinancialPreset('today')">Today</button>
+              <button type="button" class="btn-preset" id="btn-preset-this_week" onclick="setFinancialPreset('this_week')">This Week</button>
+              <button type="button" class="btn-preset" id="btn-preset-last_month" onclick="setFinancialPreset('last_month')">Last Month</button>
+              <button type="button" class="btn-preset" id="btn-preset-fy" onclick="setFinancialPreset('fy')">Financial Year</button>
+              <button type="button" class="btn-preset" id="btn-preset-all" onclick="setFinancialPreset('all')">All Time</button>
+            </div>
+
+            <!-- Custom Controls Row -->
+            <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <label style="font-size: 0.85rem; font-weight: 600;">From:</label>
+                <input type="date" id="fin-date-from" class="form-control" style="width: auto; padding: 0.35rem 0.65rem;" onchange="handleFinancialDateChange()">
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <label style="font-size: 0.85rem; font-weight: 600;">To:</label>
+                <input type="date" id="fin-date-to" class="form-control" style="width: auto; padding: 0.35rem 0.65rem;" onchange="handleFinancialDateChange()">
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <label style="font-size: 0.85rem; font-weight: 600;">Vehicle:</label>
+                <select id="fin-filter-vehicle" class="form-control" style="width: auto; padding: 0.35rem 0.65rem;" onchange="loadFinancials()">
+                  <option value="">All Vehicles</option>
+                </select>
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <label style="font-size: 0.85rem; font-weight: 600;">Firm:</label>
+                <select id="fin-filter-firm" class="form-control" style="width: auto; padding: 0.35rem 0.65rem;" onchange="loadFinancials()">
+                  <option value="">All Firms</option>
+                </select>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="loadFinancials()">↻ Refresh</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Profit & Loss Summary Cards -->
+        <div class="grid-metrics" style="margin-bottom: 1.5rem;">
+          <div class="metric-card">
+            <div class="metric-label">Total Income (Freight)</div>
+            <div class="metric-value fin-profit" id="fin-total-income">₹0</div>
+            <div class="metric-trend" id="fin-trips-count" style="color: var(--color-success);">0 Trips</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-label">Total Expenditure</div>
+            <div class="metric-value fin-loss" id="fin-total-expenditure">₹0</div>
+            <div class="metric-trend" style="color: var(--color-error);">Operational Costs</div>
+          </div>
+
+          <div class="metric-card" style="border: 2px solid var(--color-border);" id="fin-card-profit">
+            <div class="metric-label">Net Profit / Loss</div>
+            <div class="metric-value" id="fin-net-profit">₹0</div>
+            <div class="metric-trend" id="fin-profit-status" style="font-weight: 700;">Income - Expenditure</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-label">Profit Margin</div>
+            <div class="metric-value" id="fin-profit-margin">0%</div>
+            <div class="metric-trend" id="fin-rtkm-count" style="color: var(--color-info);">0 RTKM Covered</div>
+          </div>
+        </div>
+
+        <!-- 8 Categories Breakdown Grid -->
+        <div class="card-form" style="margin-bottom: 1.5rem; padding: 1rem 1.25rem;">
+          <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--color-primary); margin-bottom: 0.75rem;">
+            📊 Expenditure Breakdown by Category
+          </h4>
+          <div class="category-grid" id="category-pills-container">
+            <div class="category-pill">
+              <div class="category-pill-label">🛞 Tyre</div>
+              <div class="category-pill-value" id="cat-amt-tyre">₹0</div>
+            </div>
+            <div class="category-pill">
+              <div class="category-pill-label">🔋 Battery</div>
+              <div class="category-pill-value" id="cat-amt-battery">₹0</div>
+            </div>
+            <div class="category-pill">
+              <div class="category-pill-label">🔧 Maintenance</div>
+              <div class="category-pill-value" id="cat-amt-maintenance">₹0</div>
+            </div>
+            <div class="category-pill">
+              <div class="category-pill-label">💼 Salary</div>
+              <div class="category-pill-value" id="cat-amt-salary">₹0</div>
+            </div>
+            <div class="category-pill">
+              <div class="category-pill-label">🍲 Khuraki</div>
+              <div class="category-pill-value" id="cat-amt-khuraki">₹0</div>
+            </div>
+            <div class="category-pill">
+              <div class="category-pill-label">🛣️ Toll</div>
+              <div class="category-pill-value" id="cat-amt-toll">₹0</div>
+            </div>
+            <div class="category-pill">
+              <div class="category-pill-label">🏛️ Road Tax</div>
+              <div class="category-pill-value" id="cat-amt-road_tax">₹0</div>
+            </div>
+            <div class="category-pill">
+              <div class="category-pill-label">📦 Others</div>
+              <div class="category-pill-value" id="cat-amt-others">₹0</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Log Expense Form (Collapsible) -->
+        <div id="card-add-expense" class="card-form" style="display: none; margin-bottom: 1.5rem;">
+          <h3 style="margin-bottom: 1rem; color: var(--color-primary);">+ Log Vehicle Expenditure</h3>
+          <form id="form-add-expense" onsubmit="handleCreateExpense(event)">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Vehicle *</label>
+                <select id="exp-vehicle-id" class="form-control" required onchange="populateExpenseTrips(this.value)">
+                  <option value="">-- Choose Vehicle --</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Expense Date *</label>
+                <input type="date" id="exp-date" class="form-control" required>
+              </div>
+
+              <div class="form-group">
+                <label>Category *</label>
+                <select id="exp-category" class="form-control" required>
+                  <option value="tyre">Tyre</option>
+                  <option value="battery">Battery</option>
+                  <option value="maintenance">Maintenance / Repair</option>
+                  <option value="salary">Salary / Wages</option>
+                  <option value="khuraki">Khuraki (Allowance)</option>
+                  <option value="toll">Toll / FASTag</option>
+                  <option value="road_tax">Road Tax</option>
+                  <option value="others">Others</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Amount (₹) *</label>
+                <input type="number" step="0.01" min="0.01" id="exp-amount" class="form-control" placeholder="0.00" required>
+              </div>
+
+              <div class="form-group">
+                <label>Link to Tanker Trip (Optional)</label>
+                <select id="exp-trip-id" class="form-control">
+                  <option value="">-- No specific trip link --</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Vendor / Shop Name</label>
+                <input type="text" id="exp-vendor" class="form-control" placeholder="e.g. Apollo Tyres / Service Center">
+              </div>
+
+              <div class="form-group" style="grid-column: span 2;">
+                <label>Description / Notes</label>
+                <input type="text" id="exp-desc" class="form-control" placeholder="e.g. Replaced 2 front radial tyres, bill #1203">
+              </div>
+            </div>
+
+            <div style="margin-top: 1.25rem; display: flex; gap: 0.75rem;">
+              <button type="submit" class="btn btn-accent">Save Expense</button>
+              <button type="button" class="btn btn-secondary" onclick="toggleAddExpenseForm()">Cancel</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Unified Chronological Log Book Ledger Table -->
+        <div class="table-container">
+          <div style="padding: 1rem 1.25rem; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <span style="font-weight: 700; font-size: 1rem;">Chronological Log Book Ledger</span>
+            <span style="font-size: 0.85rem; color: var(--color-text-muted);" id="fin-ledger-count">Showing 0 entries</span>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Vehicle</th>
+                <th>Firm</th>
+                <th>Type</th>
+                <th>Category</th>
+                <th>Description</th>
+                <th style="text-align: right;">Income (₹)</th>
+                <th style="text-align: right;">Expenditure (₹)</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-log-book">
+              <tr>
+                <td colspan="9" style="text-align: center; color: var(--color-text-muted);">Loading log book ledger...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -1010,6 +1259,107 @@
         <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
           <button type="button" class="btn btn-secondary" onclick="closeTaxReceiptModal()">Cancel</button>
           <button type="submit" class="btn btn-accent">Upload Receipt</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Manage Firms Modal (Master) -->
+  <div id="modal-firms" class="modal-overlay">
+    <div class="modal-card" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3>🏢 Fleet Firms Management</h3>
+        <button class="modal-close" onclick="closeFirmsModal()">✕</button>
+      </div>
+
+      <!-- Add New Firm Form -->
+      <div style="background-color: var(--color-surface-container); padding: 1rem; border-radius: var(--radius-sm); margin-bottom: 1.25rem;">
+        <h4 style="font-size: 0.9rem; font-weight: 700; color: var(--color-primary); margin-bottom: 0.75rem;">+ Register New Firm</h4>
+        <form id="form-create-firm" onsubmit="handleCreateFirmSubmit(event)">
+          <div class="form-grid" style="grid-template-columns: repeat(2, 1fr); gap: 0.75rem;">
+            <div class="form-group">
+              <label>Firm Name *</label>
+              <input type="text" id="firm-name" class="form-control" placeholder="e.g. Kings Petroleum Logistics" required>
+            </div>
+            <div class="form-group">
+              <label>GST / Registration No</label>
+              <input type="text" id="firm-reg-no" class="form-control" placeholder="e.g. 27ABCDE1234F1Z5">
+            </div>
+            <div class="form-group">
+              <label>Contact Person</label>
+              <input type="text" id="firm-contact" class="form-control" placeholder="e.g. Operations Manager">
+            </div>
+            <div class="form-group">
+              <label>Phone Number</label>
+              <input type="tel" id="firm-phone" class="form-control" placeholder="e.g. 9876543210">
+            </div>
+          </div>
+          <div style="margin-top: 0.75rem; display: flex; justify-content: flex-end;">
+            <button type="submit" class="btn btn-accent btn-sm">+ Save Firm</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Existing Firms Table -->
+      <div style="max-height: 250px; overflow-y: auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Firm Name</th>
+              <th>GST / Reg No</th>
+              <th>Vehicles</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-firms-list">
+            <tr><td colspan="4" style="text-align: center; color: var(--color-text-muted);">Loading firms...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-top: 1rem; display: flex; justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeFirmsModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Loading / Unloading Point Modal -->
+  <div id="modal-add-route-point" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>📍 Add Route / Loading Point</h3>
+        <button class="modal-close" onclick="closeAddRoutePointModal()">✕</button>
+      </div>
+      <form id="form-add-route-point" onsubmit="handleCreateRoutePointSubmit(event)">
+        <div class="form-grid" style="grid-template-columns: 1fr; gap: 0.85rem;">
+          <div class="form-group">
+            <label>Loading / Unloading Point Name *</label>
+            <input type="text" id="point-name" class="form-control" placeholder="e.g. Pakuria KSK / Budge Budge Depot" required>
+          </div>
+          <div class="form-group">
+            <label>Point Type *</label>
+            <select id="point-type" class="form-control" required>
+              <option value="UNLOADING">Unloading Point (Dealer / Pump)</option>
+              <option value="LOADING">Loading Terminal (Depot)</option>
+              <option value="BOTH">Both</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Default RTKM (Round Trip KM) *</label>
+            <input type="number" step="0.1" id="point-default-rtkm" class="form-control" placeholder="e.g. 265.6" required>
+          </div>
+          <div class="form-group">
+            <label>Default Rate (₹ per KM)</label>
+            <input type="number" step="0.000001" id="point-default-rate" class="form-control" placeholder="e.g. 3.559476">
+          </div>
+          <div class="form-group">
+            <label>Default Pump Station</label>
+            <input type="text" id="point-pump-station" class="form-control" placeholder="e.g. Pakuria KSK">
+          </div>
+        </div>
+        <div style="margin-top: 1.25rem; display: flex; gap: 0.75rem; justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary" onclick="closeAddRoutePointModal()">Cancel</button>
+          <button type="submit" class="btn btn-accent">Save & Auto-Select</button>
         </div>
       </form>
     </div>
