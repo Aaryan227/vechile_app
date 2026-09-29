@@ -320,7 +320,7 @@ function switchTab(tabId) {
   if (tabId === 'documents') loadDocuments();
   if (tabId === 'taxes') loadTaxes();
   if (tabId === 'tanker-reports') { loadRoutePoints(); loadTankerReports(); }
-  if (tabId === 'financials') { loadFirms(); loadFinancials(); }
+  if (tabId === 'financials') { loadFirms(); loadVehicles(); loadFinancials(); }
 }
 
 function showSection(sectionId) {
@@ -2108,25 +2108,39 @@ function renderLogBookLedger(entries) {
   }).join('');
 }
 
-function toggleAddExpenseForm() {
+async function toggleAddExpenseForm() {
   const card = document.getElementById('card-add-expense');
   if (!card) return;
 
-  const isHidden = card.style.display === 'none';
+  const isHidden = card.style.display === 'none' || card.style.display === '';
   card.style.display = isHidden ? 'block' : 'none';
 
   if (isHidden) {
+    // Ensure vehicles are loaded
+    if (!state.vehicles || state.vehicles.length === 0) {
+      await loadVehicles();
+    } else {
+      populateVehicleDropdowns();
+    }
+
     const dateInput = document.getElementById('exp-date');
     if (dateInput && !dateInput.value) {
       dateInput.value = new Date().toISOString().split('T')[0];
     }
-    // Pre-populate vehicle if selected in filter
+
+    // Pre-populate vehicle if selected in filter, otherwise select the first vehicle
     const finFilterVehicle = document.getElementById('fin-filter-vehicle');
     const expVehicle = document.getElementById('exp-vehicle-id');
     if (finFilterVehicle && finFilterVehicle.value && expVehicle) {
       expVehicle.value = finFilterVehicle.value;
       populateExpenseTrips(finFilterVehicle.value);
+    } else if (state.vehicles && state.vehicles.length > 0 && expVehicle && !expVehicle.value) {
+      expVehicle.value = state.vehicles[0].id;
+      populateExpenseTrips(state.vehicles[0].id);
     }
+
+    // Smooth scroll into view so the user definitely sees it
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 }
 
