@@ -204,7 +204,13 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Enable CORS
+from fastapi.exceptions import RequestValidationError
+from app.core.response_envelope import ApiResponseEnvelopeMiddleware
+
+# Standardized API response wrapper
+app.add_middleware(ApiResponseEnvelopeMiddleware)
+
+# Enable CORS (outermost)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -213,19 +219,67 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Exception handler to prevent returning internal tracebacks to client while preserving HTTP exceptions
+HTTP_ERROR_CODES = {
+    400: "BAD_REQUEST",
+    401: "UNAUTHORIZED",
+    403: "FORBIDDEN",
+    404: "NOT_FOUND",
+    405: "METHOD_NOT_ALLOWED",
+    409: "CONFLICT",
+    422: "UNPROCESSABLE_ENTITY",
+    500: "INTERNAL_SERVER_ERROR"
+}
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    code = HTTP_ERROR_CODES.get(exc.status_code, "ERROR")
+    msg = exc.detail if isinstance(exc.detail, str) else "Request processing failed."
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "statusCode": exc.status_code,
+            "code": code,
+            "message": msg,
+            "detail": exc.detail,
+            "data": None
+        },
+        headers=getattr(exc, "headers", None)
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    msg_parts = []
+    for err in errors:
+        loc = " -> ".join(str(l) for l in err.get("loc", []))
+        msg_parts.append(f"{loc}: {err.get('msg', 'Invalid')}")
+    combined_msg = "; ".join(msg_parts) if msg_parts else "Validation failed for request parameters."
+    return JSONResponse(
+        status_code=422,
+        content={
+            "success": False,
+            "statusCode": 422,
+            "code": "VALIDATION_ERROR",
+            "message": combined_msg,
+            "detail": errors,
+            "data": None
+        }
+    )
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    if isinstance(exc, HTTPException):
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"detail": exc.detail},
-            headers=getattr(exc, "headers", None)
-        )
     logger.error(f"Unhandled error on {request.method} {request.url.path}: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
-        content={"detail": "An internal server error occurred. Please contact system administrator."}
+        content={
+            "success": False,
+            "statusCode": 500,
+            "code": "INTERNAL_SERVER_ERROR",
+            "message": "An internal server error occurred. Please contact system administrator.",
+            "detail": "An internal server error occurred. Please contact system administrator.",
+            "data": None
+        }
     )
 
 # Include Routers

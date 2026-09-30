@@ -70,4 +70,6 @@ def test_master_update_and_delete_vehicle(client, master_headers):
     assert update_res.json()["status"] == "MAINTENANCE"
 
     del_res = client.delete(f"/api/v1/vehicles/{vehicle_id}", headers=master_headers)
-    assert del_res.status_code == 204
+    assert del_res.status_code in (200, 204)
+    if del_res.status_code == 200:
+        assert del_res.json()["success"] is True

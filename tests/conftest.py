@@ -38,6 +38,61 @@ def db():
     transaction.rollback()
     connection.close()
 
+class EnvelopeDict(dict):
+    """Transparent dict wrapper allowing existing tests to access payload properties while also verifying envelope fields."""
+    def __getitem__(self, item):
+        if isinstance(item, int):
+            data = self.get("data")
+            if isinstance(data, list):
+                return data[item]
+        try:
+            return super().__getitem__(item)
+        except KeyError:
+            data = self.get("data")
+            if isinstance(data, dict) and item in data:
+                return data[item]
+            raise
+
+    def __iter__(self):
+        data = self.get("data")
+        if isinstance(data, list):
+            return iter(data)
+        return super().__iter__()
+
+    def __len__(self):
+        data = self.get("data")
+        if isinstance(data, list):
+            return len(data)
+        return super().__len__()
+
+    def __contains__(self, item):
+        if super().__contains__(item):
+            return True
+        data = self.get("data")
+        if isinstance(data, dict):
+            return item in data
+        return False
+
+    def get(self, key, default=None):
+        if super().__contains__(key):
+            return super().get(key, default)
+        data = super().get("data")
+        if isinstance(data, dict) and key in data:
+            return data.get(key, default)
+        return default
+
+class EnvelopeTestClient(TestClient):
+    def request(self, *args, **kwargs):
+        res = super().request(*args, **kwargs)
+        orig_json = res.json
+        def custom_json(**kw):
+            data = orig_json(**kw)
+            if isinstance(data, dict) and "success" in data and "statusCode" in data:
+                return EnvelopeDict(data)
+            return data
+        res.json = custom_json
+        return res
+
 @pytest.fixture
 def client(db):
     def _get_test_db():
@@ -46,7 +101,7 @@ def client(db):
         finally:
             pass
     app.dependency_overrides[get_db] = _get_test_db
-    with TestClient(app) as c:
+    with EnvelopeTestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
 

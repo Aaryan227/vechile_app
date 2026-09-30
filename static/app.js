@@ -1,3 +1,25 @@
+// Automatically unwrap standardized API response envelope for frontend UI operations
+const _originalResponseJson = Response.prototype.json;
+Response.prototype.json = async function() {
+  const result = await _originalResponseJson.call(this);
+  if (result && typeof result === 'object' && 'success' in result && 'statusCode' in result && 'data' in result) {
+    if (result.success) {
+      if (result.data !== undefined && result.data !== null) {
+        const data = result.data;
+        if (typeof data === 'object' && !Array.isArray(data)) {
+          if (!('success' in data)) data.success = result.success;
+          if (!('statusCode' in data)) data.statusCode = result.statusCode;
+          if (!('code' in data)) data.code = result.code;
+          if (!('message' in data)) data.message = result.message;
+        }
+        return data;
+      }
+      return result.data;
+    }
+  }
+  return result;
+};
+
 const API_BASE = '/api/v1';
 
 let state = {

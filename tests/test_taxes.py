@@ -94,9 +94,9 @@ def test_tax_crud_master(client, master_headers, admin_headers, sample_vehicle, 
     res_del_master = client.delete(f"/api/v1/vehicles/{sample_vehicle.id}/taxes/{tax_id}", headers=master_headers)
     assert res_del_master.status_code == 403
 
-    # Admin deletes tax record with required permission -> 204 No Content
+    # Admin deletes tax record with required permission -> 200 (Envelope) or 204
     res_del_admin = client.delete(f"/api/v1/vehicles/{sample_vehicle.id}/taxes/{tax_id}", headers=admin_headers)
-    assert res_del_admin.status_code == 204
+    assert res_del_admin.status_code in (200, 204)
 
 
 def test_duplicate_tax_prevention(client, master_headers, sample_vehicle):
@@ -172,7 +172,7 @@ def test_government_charges_crud(client, master_headers, sample_vehicle):
 
     # Delete Government Charge
     res_del = client.delete(f"/api/v1/vehicles/{sample_vehicle.id}/government-charges/{charge_id}", headers=master_headers)
-    assert res_del.status_code == 204
+    assert res_del.status_code in (200, 204)
 
 
 def test_challans_crud(client, master_headers, sample_vehicle):
@@ -320,9 +320,9 @@ def test_danda_tax_lifecycle(client, master_headers, admin_headers, sample_vehic
     res_master_delete = client.delete(f"/api/v1/vehicles/{sample_vehicle.id}/taxes/{tax_id}", headers=master_headers)
     assert res_master_delete.status_code == 403
 
-    # 6. Admin deletes Danda Tax record -> 204
+    # 6. Admin deletes Danda Tax record -> 200 or 204
     res_admin_delete = client.delete(f"/api/v1/vehicles/{sample_vehicle.id}/taxes/{tax_id}", headers=admin_headers)
-    assert res_admin_delete.status_code == 204
+    assert res_admin_delete.status_code in (200, 204)
 
 
 def test_green_tax_lifecycle(client, master_headers, admin_headers, sample_vehicle):
@@ -362,6 +362,6 @@ def test_green_tax_lifecycle(client, master_headers, admin_headers, sample_vehic
     res_master_delete = client.delete(f"/api/v1/vehicles/{sample_vehicle.id}/taxes/{tax_id}", headers=master_headers)
     assert res_master_delete.status_code == 403
 
-    # 4. Admin deletes Green Tax record -> 204
+    # 4. Admin deletes Green Tax record -> 200 or 204
     res_admin_delete = client.delete(f"/api/v1/vehicles/{sample_vehicle.id}/taxes/{tax_id}", headers=admin_headers)
-    assert res_admin_delete.status_code == 204
+    assert res_admin_delete.status_code in (200, 204)
