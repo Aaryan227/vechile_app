@@ -224,6 +224,12 @@ class ApiResponseEnvelopeMiddleware:
                                 "data": parsed_data
                             }
 
+                            # OAuth2 / RFC 6749 compliance: if response payload contains access_token,
+                            # also surface access_token and token_type at root for Swagger UI / OAuth2 clients
+                            if isinstance(parsed_data, dict) and "access_token" in parsed_data:
+                                wrapped_envelope["access_token"] = parsed_data["access_token"]
+                                wrapped_envelope["token_type"] = parsed_data.get("token_type", "bearer")
+
                             new_body = json.dumps(wrapped_envelope).encode("utf-8")
 
                             # Replace Content-Length and Content-Type headers

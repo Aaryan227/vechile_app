@@ -1,6 +1,6 @@
 from typing import Generator, Optional
 from fastapi import Depends, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError
 from sqlalchemy.orm import Session
 
@@ -10,12 +10,18 @@ from app.core.exceptions import CredentialsException, PermissionDeniedException
 from app.db.session import get_db
 from app.db.models.user import User, UserRole
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login", auto_error=False)
+http_bearer = HTTPBearer(auto_error=False)
 
 def get_current_user(
     db: Session = Depends(get_db),
-    token: str = Depends(oauth2_scheme)
+    oauth_token: Optional[str] = Depends(oauth2_scheme),
+    bearer_creds: Optional[HTTPAuthorizationCredentials] = Depends(http_bearer)
 ) -> User:
+    token = oauth_token or (bearer_creds.credentials if bearer_creds else None)
+    if not token:
+        raise CredentialsException("Not authenticated. Please authorize using the 'Authorize' button in Swagger UI or provide a Bearer token.")
+
     try:
         payload = decode_token(token)
         user_id: Optional[str] = payload.get("sub")
