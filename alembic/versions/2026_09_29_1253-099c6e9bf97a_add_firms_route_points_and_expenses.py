@@ -80,13 +80,14 @@ def upgrade() -> None:
             sa.Column('expense_date', sa.Date(), nullable=False),
             sa.Column('category', sa.Enum('tyre', 'battery', 'maintenance', 'salary', 'khuraki', 'toll', 'road_tax', 'others', name='expensecategory', native_enum=False), nullable=False),
             sa.Column('amount', sa.Float(), nullable=False),
-            sa.Column('vendor', sa.String(length=150), nullable=True),
-            sa.Column('description', sa.Text(), nullable=True),
+            sa.Column('description', sa.String(length=255), nullable=True),
+            sa.Column('vendor_name', sa.String(length=150), nullable=True),
+            sa.Column('receipt_url', sa.String(length=500), nullable=True),
             sa.Column('created_by', sa.Integer(), nullable=True),
             sa.Column('created_at', sa.DateTime(), nullable=False),
             sa.Column('updated_at', sa.DateTime(), nullable=False),
             sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
-            sa.ForeignKeyConstraint(['trip_id'], ['tanker_daily_reports.id'], ondelete='SET NULL'),
+            sa.ForeignKeyConstraint(['trip_id'], ['tanker_reports.id'], ondelete='SET NULL'),
             sa.ForeignKeyConstraint(['vehicle_id'], ['vehicles.id'], ondelete='CASCADE'),
             sa.PrimaryKeyConstraint('id')
         )
