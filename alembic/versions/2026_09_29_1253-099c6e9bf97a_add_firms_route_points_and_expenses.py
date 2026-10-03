@@ -30,7 +30,7 @@ def upgrade() -> None:
             sa.Column('registration_number', sa.String(length=100), nullable=True),
             sa.Column('contact_person', sa.String(length=100), nullable=True),
             sa.Column('phone', sa.String(length=20), nullable=True),
-            sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('1')),
+            sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.true()),
             sa.Column('created_by', sa.Integer(), nullable=True),
             sa.Column('created_at', sa.DateTime(), nullable=False),
             sa.Column('updated_at', sa.DateTime(), nullable=False),
