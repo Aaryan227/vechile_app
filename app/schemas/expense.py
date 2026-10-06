@@ -33,5 +33,7 @@ class ExpenseResponse(ExpenseBase):
     created_by: Optional[int] = None
     created_at: datetime
     updated_at: datetime
+    fastag_balance: Optional[float] = None
+    fastag_warning: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)

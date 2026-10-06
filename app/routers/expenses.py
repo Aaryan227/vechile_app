@@ -17,6 +17,8 @@ def _populate_expense_response(expense) -> ExpenseResponse:
         res.vehicle_number = expense.vehicle.vehicle_number
         if expense.vehicle.firm:
             res.firm_name = expense.vehicle.firm.name
+    res.fastag_balance = getattr(expense, "fastag_balance", None)
+    res.fastag_warning = getattr(expense, "fastag_warning", None)
     return res
 
 @router.post("", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)

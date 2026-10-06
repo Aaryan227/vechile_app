@@ -84,16 +84,18 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Toast notification
-function showToast(message, type = 'info') {
+function showToast(message, type = 'info', duration = null) {
   const container = document.getElementById('toast-container');
+  if (!container) return;
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
   toast.innerText = message;
   container.appendChild(toast);
 
+  const timeoutMs = duration || (type === 'warning' ? 7000 : 4000);
   setTimeout(() => {
     toast.remove();
-  }, 4000);
+  }, timeoutMs);
 }
 
 // Authentication
@@ -1557,6 +1559,30 @@ async function loadFASTag(vehicleId) {
     document.getElementById('fastag-account-ref').value = tag.linked_account_ref || '';
     document.getElementById('fastag-balance').value = tag.last_balance !== null && tag.last_balance !== undefined ? tag.last_balance : '';
     document.getElementById('fastag-notes').value = tag.notes || '';
+
+    const alertBox = document.getElementById('fastag-alert-box');
+    const tabBtn = document.getElementById('subtab-btn-fastag');
+    const isLowBalance = tag.tag_status === 'LOW_BALANCE' || (tag.last_balance !== null && tag.last_balance !== undefined && Number(tag.last_balance) <= 0);
+
+    if (alertBox) {
+      if (isLowBalance) {
+        const balFmt = Number(tag.last_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+        alertBox.className = 'alert-box alert-box-warning';
+        alertBox.innerHTML = `⚠️ <strong>FASTag Deficit Alert:</strong> Current balance is <strong>₹${balFmt}</strong>. Tag status is set to <strong>LOW BALANCE</strong>. Toll deductions may be impacted. Please recharge the FASTag account.`;
+        alertBox.style.display = 'flex';
+      } else if (tag.last_balance !== null && tag.last_balance !== undefined) {
+        const balFmt = Number(tag.last_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+        alertBox.className = 'alert-box alert-box-success';
+        alertBox.innerHTML = `✓ <strong>FASTag Active:</strong> Available balance is <strong>₹${balFmt}</strong>. Status: <strong>${tag.tag_status}</strong>.`;
+        alertBox.style.display = 'flex';
+      } else {
+        alertBox.style.display = 'none';
+      }
+    }
+
+    if (tabBtn) {
+      tabBtn.innerHTML = isLowBalance ? `FASTag <span style="color: var(--color-error); font-weight: bold;">⚠️</span>` : `FASTag`;
+    }
   } catch (err) {
     console.error(err);
   }
@@ -2234,7 +2260,12 @@ async function handleCreateExpense(e) {
       throw new Error(err.detail || 'Failed to record expense');
     }
 
-    showToast('Expense recorded successfully!', 'success');
+    const createdExpense = await res.json();
+    if (createdExpense && createdExpense.fastag_warning) {
+      showToast(createdExpense.fastag_warning, 'warning', 8000);
+    } else {
+      showToast('Expense recorded successfully!', 'success');
+    }
     document.getElementById('form-add-expense').reset();
     toggleAddExpenseForm();
     await loadFinancials();
