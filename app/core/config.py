@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     TAX_WARNING_DAYS: int = 30
     TAX_URGENT_DAYS: int = 7
 
+    # Firebase Cloud Messaging
+    FIREBASE_CREDENTIALS_PATH: str = "firebase-key.json"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 settings = Settings()

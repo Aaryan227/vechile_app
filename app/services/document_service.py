@@ -238,6 +238,25 @@ def request_reupload_permission(
     )
     db.add(audit)
     db.commit()
+
+    # Trigger push notification to Admins
+    try:
+        from app.services import notification_service
+        veh_num = doc.vehicle.vehicle_number if doc.vehicle else f"#{doc.vehicle_id}"
+        doc_type_val = doc.document_type.value if hasattr(doc.document_type, "value") else str(doc.document_type)
+        notification_service.send_push_notification_to_admins(
+            db=db,
+            title="📄 Document Re-Upload Requested",
+            body=f"Re-upload approval requested for vehicle {veh_num} ({doc_type_val}).",
+            data={
+                "type": "document_reupload",
+                "document_id": str(doc.id),
+                "vehicle_id": str(doc.vehicle_id)
+            }
+        )
+    except Exception:
+        pass
+
     return doc
 
 

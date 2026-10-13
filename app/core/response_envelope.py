@@ -29,6 +29,8 @@ ENDPOINT_META: Dict[Tuple[str, str], Tuple[str, str]] = {
     ("POST", "/api/v1/users"): ("USER_CREATED", "User created successfully."),
     ("GET", "/api/v1/users/{user_id}"): ("USER_FETCHED", "User details retrieved successfully."),
     ("PATCH", "/api/v1/users/{user_id}"): ("USER_UPDATED", "User updated successfully."),
+    ("POST", "/api/v1/users/device-token"): ("DEVICE_TOKEN_REGISTERED", "Device token registered successfully."),
+    ("DELETE", "/api/v1/users/device-token"): ("DEVICE_TOKEN_REMOVED", "Device token removed successfully."),
 
     # Admin Dashboard & Fleet Compliance
     ("GET", "/api/v1/admin/dashboard"): ("DASHBOARD_SUMMARY_FETCHED", "Dashboard summary retrieved successfully."),

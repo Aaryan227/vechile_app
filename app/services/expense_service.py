@@ -73,6 +73,23 @@ def create_expense(db: Session, data: ExpenseCreate, user_id: int) -> VehicleExp
     )
     db.add(audit)
     db.commit()
+
+    if fastag_warning:
+        try:
+            from app.services import notification_service
+            notification_service.send_push_notification_to_admins(
+                db=db,
+                title="⚠️ FASTag Deficit Alert",
+                body=f"FASTag balance exhausted for {vehicle.vehicle_number}! Remaining: ₹{fastag_balance:,.2f}.",
+                data={
+                    "type": "fastag_deficit",
+                    "vehicle_id": str(expense.vehicle_id),
+                    "balance": str(fastag_balance)
+                }
+            )
+        except Exception:
+            pass
+
     return expense
 
 def get_expenses(

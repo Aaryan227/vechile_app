@@ -18,6 +18,7 @@ from app.db.models.tax import (
     ChallanStatus,
     FASTagStatus,
 )
+from app.db.models.device_token import AdminDeviceToken
 
 __all__ = [
     "User",
@@ -42,4 +43,5 @@ __all__ = [
     "TaxStatus",
     "ChallanStatus",
     "FASTagStatus",
+    "AdminDeviceToken",
 ]

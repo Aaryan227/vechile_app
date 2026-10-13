@@ -70,3 +70,26 @@ def update_user(
     db.refresh(user)
     return user
 
+from app.schemas.notification import DeviceTokenCreate, DeviceTokenResponse
+from app.services import notification_service
+
+@router.post("/device-token", response_model=DeviceTokenResponse, status_code=status.HTTP_201_CREATED)
+def register_device_token(
+    data: DeviceTokenCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Register or update an FCM push notification device token for the current user."""
+    return notification_service.register_device_token(db, current_user.id, data)
+
+
+@router.delete("/device-token", status_code=status.HTTP_200_OK)
+def remove_device_token(
+    data: DeviceTokenCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Unregister an FCM push notification device token (e.g. upon mobile app logout)."""
+    notification_service.unregister_device_token(db, current_user.id, data.device_token)
+    return {"message": "Device token removed successfully."}
+
