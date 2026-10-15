@@ -135,7 +135,6 @@ def export_taxes(
 # Compliance Push Notifications
 # ==========================================
 
-@router.post("/notifications/check-expiring-documents")
 @router.post("/notifications/compliance-scan")
 def trigger_compliance_scan(
     days: int = Query(7, ge=1, le=90, description="Threshold in days to check for expiring documents"),
