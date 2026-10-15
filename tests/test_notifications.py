@@ -181,35 +181,9 @@ def test_tax_overdue_on_update_triggers_push_notification(client, master_headers
 
 
 def test_admin_check_expiring_documents_endpoint(client, master_headers, admin_headers):
-    # 1. Register admin device token
-    client.post("/api/v1/users/device-token", headers=admin_headers, json={
-        "device_token": "admin_fcm_token_expiring_docs_endpoint",
-        "platform": "android"
-    })
-
-    # 2. Create vehicle and upload document expiring in 4 days
     from datetime import date, timedelta
     from io import BytesIO
 
-    firm_res = client.post("/api/v1/firms", headers=master_headers, json={"name": "Expiring Docs Test Firm"})
-    firm_id = firm_res.json()["id"]
-
-    v_res = client.post("/api/v1/vehicles", headers=master_headers, json={
-        "vehicle_number": "RJ14EX7777",
-        "vehicle_class": "Tanker",
-        "firm_id": firm_id
-    })
-    vehicle_id = v_res.json()["id"]
-
-    exp_date_str = (date.today() + timedelta(days=4)).isoformat()
-    client.post("/api/v1/documents/upload", headers=master_headers, data={
-        "vehicle_id": vehicle_id,
-        "document_type": "FITNESS",
-        "document_number": "FIT7777",
-        "expiry_date": exp_date_str
-    }, files={"file": ("fitness.pdf", BytesIO(b"%PDF-1.4 test fitness cert"), "application/pdf")})
-
-    # 3. Call POST /api/v1/admin/notifications/check-expiring-documents
     with patch("firebase_admin.messaging.send_each_for_multicast") as mock_send, \
          patch("app.services.notification_service.init_firebase", return_value=True):
 
@@ -218,14 +192,57 @@ def test_admin_check_expiring_documents_endpoint(client, master_headers, admin_h
         mock_response.responses = [MagicMock(success=True)]
         mock_send.return_value = mock_response
 
-        scan_res = client.post("/api/v1/admin/notifications/check-expiring-documents?days=7", headers=admin_headers)
+        # 1. Register admin device token
+        client.post("/api/v1/users/device-token", headers=admin_headers, json={
+            "device_token": "admin_fcm_token_expiring_docs_endpoint",
+            "platform": "android"
+        })
+
+        # 2. Create vehicle, upload document expiring in 4 days, and create an overdue tax record
+        firm_res = client.post("/api/v1/firms", headers=master_headers, json={"name": "Expiring Docs Test Firm"})
+        firm_id = firm_res.json()["id"]
+
+        v_res = client.post("/api/v1/vehicles", headers=master_headers, json={
+            "vehicle_number": "RJ14EX7777",
+            "vehicle_class": "Tanker",
+            "firm_id": firm_id
+        })
+        vehicle_id = v_res.json()["id"]
+
+        exp_date_str = (date.today() + timedelta(days=4)).isoformat()
+        client.post("/api/v1/documents/upload", headers=master_headers, data={
+            "vehicle_id": vehicle_id,
+            "document_type": "FITNESS",
+            "document_number": "FIT7777",
+            "expiry_date": exp_date_str
+        }, files={"file": ("fitness.pdf", BytesIO(b"%PDF-1.4 test fitness cert"), "application/pdf")})
+
+        # Create an overdue tax record
+        client.post(f"/api/v1/vehicles/{vehicle_id}/taxes", headers=master_headers, json={
+            "tax_type": "STATE_VEHICLE_TAX",
+            "state": "RJ",
+            "period_start": "2026-01-01",
+            "period_end": "2026-06-30",
+            "amount": 4200.0,
+            "due_date": "2026-06-01", # Past due date
+            "valid_until": "2026-06-30"
+        })
+
+        # Reset mock calls after setup
+        mock_send.reset_mock()
+
+        # 3. Call POST /api/v1/admin/notifications/compliance-scan
+        scan_res = client.post("/api/v1/admin/notifications/compliance-scan?days=7", headers=admin_headers)
         assert scan_res.status_code == 200
         data = scan_res.json()
-        assert data["notifications_sent"] >= 1
+        assert data["notifications_sent"] >= 2
+        assert data["expiring_documents_notified"] >= 1
+        assert data["overdue_taxes_notified"] >= 1
         assert data["days_threshold"] == 7
 
         assert mock_send.called
-        sent_message = mock_send.call_args[0][0]
-        assert "admin_fcm_token_expiring_docs_endpoint" in sent_message.tokens
-        assert "Document Expiring Soon" in sent_message.notification.title
+        # Check titles sent
+        titles = [call[0][0].notification.title for call in mock_send.call_args_list]
+        assert any("Document Expiring Soon" in t for t in titles)
+        assert any("Tax Payment Overdue" in t for t in titles)
 

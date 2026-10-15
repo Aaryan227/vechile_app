@@ -136,16 +136,22 @@ def export_taxes(
 # ==========================================
 
 @router.post("/notifications/check-expiring-documents")
-def trigger_expiring_documents_check(
+@router.post("/notifications/compliance-scan")
+def trigger_compliance_scan(
     days: int = Query(7, ge=1, le=90, description="Threshold in days to check for expiring documents"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_master_or_admin)
 ):
-    """Trigger a compliance scan to dispatch push notifications to Admins for all documents expiring within N days."""
+    """Trigger a compliance scan to dispatch push notifications to Admins for documents expiring within N days AND overdue taxes."""
     from app.services import notification_service
-    sent_count = notification_service.check_and_notify_expiring_documents(db=db, days=days)
+    result = notification_service.run_compliance_notification_scan(db=db, doc_days=days)
+    docs_count = result["expiring_documents_notified"]
+    taxes_count = result["overdue_taxes_notified"]
+    total = result["total_notifications_sent"]
     return {
-        "message": f"Scan completed. Dispatched expiring document warnings for {sent_count} document(s).",
-        "notifications_sent": sent_count,
+        "message": f"Compliance scan completed. Dispatched {total} notification(s): {docs_count} expiring document(s), {taxes_count} overdue tax(es).",
+        "notifications_sent": total,
+        "expiring_documents_notified": docs_count,
+        "overdue_taxes_notified": taxes_count,
         "days_threshold": days
     }

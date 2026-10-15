@@ -197,3 +197,45 @@ def check_and_notify_expiring_documents(db: Session, days: int = 7) -> int:
 
     return count
 
+
+def check_and_notify_overdue_taxes(db: Session) -> int:
+    """Check for tax records whose due date has passed without payment and notify Admins."""
+    from app.services import tax_service
+    from app.db.models.tax import TaxStatus
+
+    overdue_taxes = tax_service.get_taxes_by_status(db, TaxStatus.OVERDUE)
+    if not overdue_taxes:
+        return 0
+
+    count = 0
+    for tax in overdue_taxes:
+        veh_num = tax.vehicle.vehicle_number if tax.vehicle else f"#{tax.vehicle_id}"
+        tax_name = tax.tax_type.value.replace("_", " ").title() if hasattr(tax.tax_type, "value") else str(tax.tax_type)
+        amt_fmt = f"₹{tax.amount:,.2f}"
+
+        send_push_notification_to_admins(
+            db=db,
+            title="⚠️ Tax Payment Overdue",
+            body=f"{tax_name} ({amt_fmt}) for vehicle {veh_num} is OVERDUE (Due: {tax.due_date})!",
+            data={
+                "type": "tax_overdue",
+                "tax_id": str(tax.id),
+                "vehicle_id": str(tax.vehicle_id),
+                "amount": str(tax.amount)
+            }
+        )
+        count += 1
+
+    return count
+
+
+def run_compliance_notification_scan(db: Session, doc_days: int = 7) -> Dict[str, int]:
+    """Scans and dispatches notifications for both expiring documents and overdue taxes."""
+    docs_notified = check_and_notify_expiring_documents(db=db, days=doc_days)
+    taxes_notified = check_and_notify_overdue_taxes(db=db)
+    return {
+        "expiring_documents_notified": docs_notified,
+        "overdue_taxes_notified": taxes_notified,
+        "total_notifications_sent": docs_notified + taxes_notified
+    }
+
