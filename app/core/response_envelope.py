@@ -38,6 +38,7 @@ ENDPOINT_META: Dict[Tuple[str, str], Tuple[str, str]] = {
     ("GET", "/api/v1/admin/taxes/due-soon"): ("TAXES_DUE_SOON_FETCHED", "Taxes due soon retrieved successfully."),
     ("GET", "/api/v1/admin/taxes/overdue"): ("TAXES_OVERDUE_FETCHED", "Overdue taxes retrieved successfully."),
     ("GET", "/api/v1/admin/taxes/expired"): ("TAXES_EXPIRED_FETCHED", "Expired taxes retrieved successfully."),
+    ("POST", "/api/v1/admin/notifications/check-expiring-documents"): ("EXPIRING_DOCUMENTS_SCAN_COMPLETED", "Expiring documents notification check completed successfully."),
 
     # Vehicles
     ("GET", "/api/v1/vehicles"): ("VEHICLES_FETCHED", "Vehicles retrieved successfully."),

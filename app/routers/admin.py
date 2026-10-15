@@ -129,3 +129,23 @@ def export_taxes(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+# ==========================================
+# Compliance Push Notifications
+# ==========================================
+
+@router.post("/notifications/check-expiring-documents")
+def trigger_expiring_documents_check(
+    days: int = Query(7, ge=1, le=90, description="Threshold in days to check for expiring documents"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_master_or_admin)
+):
+    """Trigger a compliance scan to dispatch push notifications to Admins for all documents expiring within N days."""
+    from app.services import notification_service
+    sent_count = notification_service.check_and_notify_expiring_documents(db=db, days=days)
+    return {
+        "message": f"Scan completed. Dispatched expiring document warnings for {sent_count} document(s).",
+        "notifications_sent": sent_count,
+        "days_threshold": days
+    }

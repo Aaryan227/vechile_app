@@ -89,6 +89,25 @@ def create_expense(db: Session, data: ExpenseCreate, user_id: int) -> VehicleExp
             )
         except Exception:
             pass
+        # Trigger push notification for large single expense (> ₹25,000)
+    if expense.amount >= 25000:
+        try:
+            from app.services import notification_service
+            cat_name = expense.category.value.title()
+            amt_fmt = f"₹{expense.amount:,.2f}"
+            notification_service.send_push_notification_to_admins(
+                db=db,
+                title="💰 High Expense Logged",
+                body=f"High {cat_name} expense of {amt_fmt} recorded for vehicle {vehicle.vehicle_number}.",
+                data={
+                    "type": "large_expense",
+                    "expense_id": str(expense.id),
+                    "vehicle_id": str(expense.vehicle_id),
+                    "amount": str(expense.amount)
+                }
+            )
+        except Exception:
+            pass
 
     return expense
 

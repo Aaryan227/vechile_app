@@ -138,6 +138,26 @@ def create_tax_record(db: Session, vehicle_id: int, data: TaxRecordCreate, user_
     db.add(audit)
     db.commit()
 
+
+        # Trigger push notification if tax is saved as OVERDUE
+    if tax_record.status == TaxStatus.OVERDUE:
+        try:
+            from app.services import notification_service
+            tax_name = tax_record.tax_type.value.replace("_", " ").title()
+            amt_fmt = f"₹{tax_record.amount:,.2f}"
+            notification_service.send_push_notification_to_admins(
+                db=db,
+                title="⚠️ Tax Payment Overdue",
+                body=f"{tax_name} ({amt_fmt}) for vehicle {vehicle.vehicle_number} is OVERDUE!",
+                data={
+                    "type": "tax_overdue",
+                    "tax_id": str(tax_record.id),
+                    "vehicle_id": str(vehicle_id)
+                }
+            )
+        except Exception:
+            pass
+
     return tax_record
 
 
@@ -163,6 +183,27 @@ def update_tax_record(db: Session, tax_id: int, data: TaxRecordUpdate, user_id: 
     )
     db.add(audit)
     db.commit()
+
+    # Trigger push notification if tax is updated/marked as OVERDUE
+    if tax.status == TaxStatus.OVERDUE:
+        try:
+            from app.services import notification_service
+            veh_num = tax.vehicle.vehicle_number if tax.vehicle else f"#{tax.vehicle_id}"
+            tax_name = tax.tax_type.value.replace("_", " ").title() if hasattr(tax.tax_type, "value") else str(tax.tax_type)
+            amt_fmt = f"₹{tax.amount:,.2f}"
+            notification_service.send_push_notification_to_admins(
+                db=db,
+                title="⚠️ Tax Payment Overdue",
+                body=f"{tax_name} ({amt_fmt}) for vehicle {veh_num} is OVERDUE!",
+                data={
+                    "type": "tax_overdue",
+                    "tax_id": str(tax.id),
+                    "vehicle_id": str(tax.vehicle_id)
+                }
+            )
+        except Exception:
+            pass
+
     return tax
 
 
@@ -361,6 +402,25 @@ def create_challan(db: Session, vehicle_id: int, data: ChallanCreate, user_id: i
     )
     db.add(audit)
     db.commit()
+
+        # Trigger push notification to Admins for new Challan
+    try:
+        from app.services import notification_service
+        amt_fmt = f"₹{challan.amount:,.2f}"
+        notification_service.send_push_notification_to_admins(
+            db=db,
+            title="🚨 New Traffic Challan Issued",
+            body=f"Challan #{challan.challan_number} ({amt_fmt}) recorded for vehicle {vehicle.vehicle_number}.",
+            data={
+                "type": "new_challan",
+                "challan_id": str(challan.id),
+                "vehicle_id": str(vehicle_id),
+                "amount": str(challan.amount)
+            }
+        )
+    except Exception:
+        pass
+
     return challan
 
 

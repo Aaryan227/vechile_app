@@ -1,6 +1,6 @@
 import os
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone , date , timedelta
 from typing import Optional, Dict, List
 from sqlalchemy.orm import Session
 import firebase_admin
@@ -10,6 +10,9 @@ from app.core.config import settings
 from app.db.models.user import User, UserRole
 from app.db.models.device_token import AdminDeviceToken
 from app.schemas.notification import DeviceTokenCreate
+from app.db.models.document import Document
+from app.db.models.vehicle import Vehicle
+
 
 logger = logging.getLogger(__name__)
 
@@ -158,3 +161,39 @@ def send_push_notification_to_admins(
     except Exception as e:
         logger.error(f"Error sending multicast push notification: {e}", exc_info=True)
         return 0
+
+
+def check_and_notify_expiring_documents(db: Session, days: int = 7) -> int:
+    """Check for documents expiring within the next N days and notify Admins."""
+    today = date.today()
+    target_date = today + timedelta(days=days)
+
+    expiring_docs = db.query(Document).filter(
+        Document.expiry_date >= today,
+        Document.expiry_date <= target_date
+    ).all()
+
+    if not expiring_docs:
+        return 0
+
+    count = 0
+    for doc in expiring_docs:
+        veh_num = doc.vehicle.vehicle_number if doc.vehicle else f"#{doc.vehicle_id}"
+        doc_type_name = doc.document_type.value if hasattr(doc.document_type, "value") else str(doc.document_type)
+        days_left = (doc.expiry_date - today).days
+
+        send_push_notification_to_admins(
+            db=db,
+            title="⏳ Document Expiring Soon",
+            body=f"{doc_type_name} for vehicle {veh_num} expires in {days_left} day(s) on {doc.expiry_date}!",
+            data={
+                "type": "document_expiring_soon",
+                "document_id": str(doc.id),
+                "vehicle_id": str(doc.vehicle_id),
+                "expiry_date": str(doc.expiry_date)
+            }
+        )
+        count += 1
+
+    return count
+
