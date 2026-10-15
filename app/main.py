@@ -23,7 +23,8 @@ from app.routers import (
     firms_router,
     route_points_router,
     expenses_router,
-    financials_router
+    financials_router,
+    notifications_router
 )
 from app.db.models.user import User, UserRole
 from app.db.models.firm import Firm
@@ -295,6 +296,7 @@ app.include_router(firms_router, prefix=settings.API_V1_STR)
 app.include_router(route_points_router, prefix=settings.API_V1_STR)
 app.include_router(expenses_router, prefix=settings.API_V1_STR)
 app.include_router(financials_router, prefix=settings.API_V1_STR)
+app.include_router(notifications_router, prefix=settings.API_V1_STR)
 
 # Serve Web Frontend static files
 static_dir = os.path.join(os.path.dirname(__file__), "..", "static")

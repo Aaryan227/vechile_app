@@ -10,6 +10,7 @@ from app.routers.firms import router as firms_router
 from app.routers.route_points import router as route_points_router
 from app.routers.expenses import router as expenses_router
 from app.routers.financials import router as financials_router
+from app.routers.notifications import router as notifications_router
 
 __all__ = [
     "auth_router",
@@ -23,5 +24,6 @@ __all__ = [
     "firms_router",
     "route_points_router",
     "expenses_router",
-    "financials_router"
+    "financials_router",
+    "notifications_router"
 ]

@@ -12,6 +12,8 @@ from app.db.models.device_token import AdminDeviceToken
 from app.schemas.notification import DeviceTokenCreate
 from app.db.models.document import Document
 from app.db.models.vehicle import Vehicle
+from app.db.models.notification import UserNotification
+from app.core.exceptions import NotFoundException
 
 
 logger = logging.getLogger(__name__)
@@ -102,9 +104,33 @@ def send_push_notification_to_admins(
     data: Optional[Dict[str, str]] = None
 ) -> int:
     """
-    Send a push notification to all registered Admin mobile devices.
-    Returns the count of successfully delivered notifications.
+    Send a push notification to all registered Admin mobile devices
+    and persist an in-app notification record for the Bell Icon inbox.
+    Returns the count of successfully delivered push notifications.
     """
+    # 1. Persist notification to database for all active Admins (Bell Icon Inbox)
+    try:
+        active_admins = db.query(User).filter(
+            User.role == UserRole.ADMIN,
+            User.is_active == True
+        ).all()
+        for admin in active_admins:
+            notif = UserNotification(
+                user_id=admin.id,
+                title=title,
+                body=body,
+                notification_type=str((data or {}).get("type", "")) if data else None,
+                data_payload=data or {},
+                is_read=False,
+                created_at=datetime.now(timezone.utc)
+            )
+            db.add(notif)
+        db.commit()
+    except Exception as db_err:
+        logger.error(f"Failed to record in-app notification in DB: {db_err}", exc_info=True)
+        db.rollback()
+
+    # 2. Dispatch FCM Push Notification to registered devices
     if not init_firebase():
         logger.info("Firebase not configured; skipping push notification.")
         return 0
@@ -238,4 +264,88 @@ def run_compliance_notification_scan(db: Session, doc_days: int = 7) -> Dict[str
         "overdue_taxes_notified": taxes_notified,
         "total_notifications_sent": docs_notified + taxes_notified
     }
+
+
+# ==========================================
+# In-App Notification Center (Bell Icon)
+# ==========================================
+
+def get_user_notifications(
+    db: Session,
+    user_id: int,
+    unread_only: bool = False,
+    skip: int = 0,
+    limit: int = 50
+):
+    """Retrieve in-app notifications for a user with unread and total counts."""
+    query = db.query(UserNotification).filter(UserNotification.user_id == user_id)
+
+    total_count = query.count()
+    unread_count = db.query(UserNotification).filter(
+        UserNotification.user_id == user_id,
+        UserNotification.is_read == False
+    ).count()
+
+    if unread_only:
+        query = query.filter(UserNotification.is_read == False)
+
+    notifications = query.order_by(UserNotification.created_at.desc()).offset(skip).limit(limit).all()
+    return notifications, unread_count, total_count
+
+
+def get_unread_notification_count(db: Session, user_id: int) -> int:
+    """Get the number of unread in-app notifications for a user."""
+    return db.query(UserNotification).filter(
+        UserNotification.user_id == user_id,
+        UserNotification.is_read == False
+    ).count()
+
+
+def mark_notification_as_read(db: Session, notification_id: int, user_id: int) -> UserNotification:
+    """Mark a single notification as read."""
+    notif = db.query(UserNotification).filter(
+        UserNotification.id == notification_id,
+        UserNotification.user_id == user_id
+    ).first()
+
+    if not notif:
+        raise NotFoundException("Notification not found")
+
+    if not notif.is_read:
+        notif.is_read = True
+        notif.read_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(notif)
+
+    return notif
+
+
+def mark_all_notifications_as_read(db: Session, user_id: int) -> int:
+    """Mark all unread notifications as read for a user."""
+    now = datetime.now(timezone.utc)
+    updated_count = db.query(UserNotification).filter(
+        UserNotification.user_id == user_id,
+        UserNotification.is_read == False
+    ).update({
+        UserNotification.is_read: True,
+        UserNotification.read_at: now
+    }, synchronize_session=False)
+
+    db.commit()
+    return updated_count
+
+
+def delete_user_notification(db: Session, notification_id: int, user_id: int) -> None:
+    """Delete a notification from user's inbox."""
+    notif = db.query(UserNotification).filter(
+        UserNotification.id == notification_id,
+        UserNotification.user_id == user_id
+    ).first()
+
+    if not notif:
+        raise NotFoundException("Notification not found")
+
+    db.delete(notif)
+    db.commit()
+
 

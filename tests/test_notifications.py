@@ -246,3 +246,68 @@ def test_admin_check_expiring_documents_endpoint(client, master_headers, admin_h
         assert any("Document Expiring Soon" in t for t in titles)
         assert any("Tax Payment Overdue" in t for t in titles)
 
+
+def test_in_app_notification_inbox_flow(client, master_headers, admin_headers):
+    # 1. Trigger an action that fires a notification (e.g. new challan)
+    firm_res = client.post("/api/v1/firms", headers=master_headers, json={"name": "Bell Icon Transport"})
+    firm_id = firm_res.json()["id"]
+
+    v_res = client.post("/api/v1/vehicles", headers=master_headers, json={
+        "vehicle_number": "MP09BL9999",
+        "vehicle_class": "Tanker",
+        "firm_id": firm_id
+    })
+    vehicle_id = v_res.json()["id"]
+
+    # Record 2 challans to generate 2 in-app notifications
+    client.post(f"/api/v1/vehicles/{vehicle_id}/challans", headers=master_headers, json={
+        "challan_number": "BELL-CHL-001",
+        "issue_date": "2026-10-15",
+        "amount": 1000.0,
+        "violation_details": "Signal jump"
+    })
+    client.post(f"/api/v1/vehicles/{vehicle_id}/challans", headers=master_headers, json={
+        "challan_number": "BELL-CHL-002",
+        "issue_date": "2026-10-15",
+        "amount": 2500.0,
+        "violation_details": "No parking"
+    })
+
+    # 2. Check unread count (Admin bell icon badge)
+    count_res = client.get("/api/v1/notifications/unread-count", headers=admin_headers)
+    assert count_res.status_code == 200
+    assert count_res.json()["unread_count"] >= 2
+
+    # 3. Fetch notifications inbox list
+    inbox_res = client.get("/api/v1/notifications", headers=admin_headers)
+    assert inbox_res.status_code == 200
+    inbox = inbox_res.json()
+    assert inbox["unread_count"] >= 2
+    assert len(inbox["notifications"]) >= 2
+    first_notif = inbox["notifications"][0]
+    assert first_notif["is_read"] is False
+    assert "Challan" in first_notif["title"]
+
+    notif_id = first_notif["id"]
+
+    # 4. Mark single notification as read
+    read_res = client.patch(f"/api/v1/notifications/{notif_id}/read", headers=admin_headers)
+    assert read_res.status_code == 200
+    assert read_res.json()["is_read"] is True
+    assert read_res.json()["read_at"] is not None
+
+    # Check unread count decreased
+    count_after_one = client.get("/api/v1/notifications/unread-count", headers=admin_headers).json()["unread_count"]
+    assert count_after_one == inbox["unread_count"] - 1
+
+    # 5. Mark all as read
+    read_all_res = client.post("/api/v1/notifications/read-all", headers=admin_headers)
+    assert read_all_res.status_code == 200
+    final_count = client.get("/api/v1/notifications/unread-count", headers=admin_headers).json()["unread_count"]
+    assert final_count == 0
+
+    # 6. Delete notification
+    del_res = client.delete(f"/api/v1/notifications/{notif_id}", headers=admin_headers)
+    assert del_res.status_code == 200
+
+

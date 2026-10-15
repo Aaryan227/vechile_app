@@ -32,6 +32,13 @@ ENDPOINT_META: Dict[Tuple[str, str], Tuple[str, str]] = {
     ("POST", "/api/v1/users/device-token"): ("DEVICE_TOKEN_REGISTERED", "Device token registered successfully."),
     ("DELETE", "/api/v1/users/device-token"): ("DEVICE_TOKEN_REMOVED", "Device token removed successfully."),
 
+    # In-App Notifications (Bell Icon Inbox)
+    ("GET", "/api/v1/notifications"): ("NOTIFICATIONS_FETCHED", "Notification inbox retrieved successfully."),
+    ("GET", "/api/v1/notifications/unread-count"): ("UNREAD_COUNT_FETCHED", "Unread notification count retrieved successfully."),
+    ("PATCH", "/api/v1/notifications/{notification_id}/read"): ("NOTIFICATION_MARKED_READ", "Notification marked as read successfully."),
+    ("POST", "/api/v1/notifications/read-all"): ("NOTIFICATIONS_MARKED_ALL_READ", "All notifications marked as read successfully."),
+    ("DELETE", "/api/v1/notifications/{notification_id}"): ("NOTIFICATION_DELETED", "Notification deleted successfully."),
+
     # Admin Dashboard & Fleet Compliance
     ("GET", "/api/v1/admin/dashboard"): ("DASHBOARD_SUMMARY_FETCHED", "Dashboard summary retrieved successfully."),
     ("GET", "/api/v1/admin/taxes"): ("TAXES_FETCHED", "Fleet tax records retrieved successfully."),

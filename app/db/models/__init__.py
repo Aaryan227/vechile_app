@@ -19,6 +19,7 @@ from app.db.models.tax import (
     FASTagStatus,
 )
 from app.db.models.device_token import AdminDeviceToken
+from app.db.models.notification import UserNotification
 
 __all__ = [
     "User",
@@ -44,4 +45,5 @@ __all__ = [
     "ChallanStatus",
     "FASTagStatus",
     "AdminDeviceToken",
+    "UserNotification",
 ]
