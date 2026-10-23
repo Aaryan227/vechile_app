@@ -29,6 +29,7 @@ class Settings(BaseSettings):
 
     # Firebase Cloud Messaging
     FIREBASE_CREDENTIALS_PATH: str = "firebase-key.json"
+    FCM_ANDROID_CHANNEL_ID: str = "high_importance_channel"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

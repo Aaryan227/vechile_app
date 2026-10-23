@@ -159,6 +159,23 @@ def send_push_notification_to_admins(
         ),
         data=safe_data,
         tokens=token_strings,
+        android=messaging.AndroidConfig(
+            priority="high",
+            notification=messaging.AndroidNotification(
+                channel_id=settings.FCM_ANDROID_CHANNEL_ID,
+                priority="high",
+                default_sound=True,
+                default_vibrate_timings=True,
+            ),
+        ),
+        apns=messaging.APNSConfig(
+            payload=messaging.APNSPayload(
+                aps=messaging.Aps(
+                    sound="default",
+                    badge=1,
+                )
+            )
+        ),
     )
 
     try:
